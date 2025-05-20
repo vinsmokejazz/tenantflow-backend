@@ -39,6 +39,45 @@ model Client {
   phone               String?
   business            Business @relation(fields: [businessId], references: [id])
   businessId          String
-  
+  leads               Lead[]
+  followUps           FollowUp[]
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  @@index([businessId])
+  @@map("clients")
 
 }
+
+
+model Lead {
+  id                  String      @id @default(uuid())
+  status              String      @default("new")
+  notes               String?
+  client              Client      @relation(fields: [clientId], references: [id])
+  clientId            String
+  business            Business    @relation(fields: [businessId], references: [id] )
+  businessId          String
+  createdAt           DateTime    @default(now())  @map("created_at")
+
+  @@index([businessId,clientId])
+  @@map("leads")
+
+} 
+
+
+model FollowUp {
+  id                String        @id @default(uuid())
+  notes             String
+  dueDate           DateTime
+  completed         Boolean
+  client            Client        @relation(fields: [clientId],references: [id])
+  clientId          String
+  business          Business      @relation(fields: [businessId],references: [id])
+  businessId        String
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  @@index([businessId,clientId])
+  @@map("follow_ups")
+  
+}
+
