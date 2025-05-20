@@ -6,3 +6,39 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model Business {
+  id                  String   @id @default(uuid())
+  name                String
+  users               User[]
+  clients             Client[]
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@map("businesses")
+}
+
+model User {
+  id                  String   @id @default(uuid())
+  email               String   @unique
+  role                String   @default("staff")
+  business            Business @relation(fields: [businessId], references: [id])
+  businessId          String
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  // Link to Supabase Auth
+  authId              String? @unique
+
+  @@index([businessId])
+  @@map("users")
+}
+
+model Client {
+  id                  String   @id @default(uuid())
+  name                String
+  email               String?
+  phone               String?
+  business            Business @relation(fields: [businessId], references: [id])
+  businessId          String
+  
+
+}
