@@ -12,7 +12,10 @@ model Business {
   name                String
   users               User[]
   clients             Client[]
+  leads               Lead[]
+  followUps           FollowUp[]
   createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
   @@map("businesses")
 }
@@ -24,6 +27,7 @@ model User {
   business            Business @relation(fields: [businessId], references: [id])
   businessId          String
   createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
   // Link to Supabase Auth
   authId              String? @unique
@@ -42,12 +46,11 @@ model Client {
   leads               Lead[]
   followUps           FollowUp[]
   createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
   @@index([businessId])
   @@map("clients")
-
 }
-
 
 model Lead {
   id                  String      @id @default(uuid())
@@ -55,29 +58,28 @@ model Lead {
   notes               String?
   client              Client      @relation(fields: [clientId], references: [id])
   clientId            String
-  business            Business    @relation(fields: [businessId], references: [id] )
+  business            Business    @relation(fields: [businessId], references: [id])
   businessId          String
   createdAt           DateTime    @default(now())  @map("created_at")
+  updatedAt           DateTime    @updatedAt @map("updated_at")
 
-  @@index([businessId,clientId])
+  @@index([businessId, clientId])
   @@map("leads")
-
 } 
-
 
 model FollowUp {
   id                String        @id @default(uuid())
   notes             String
   dueDate           DateTime
-  completed         Boolean
-  client            Client        @relation(fields: [clientId],references: [id])
+  completed         Boolean       @default(false)
+  client            Client        @relation(fields: [clientId], references: [id])
   clientId          String
-  business          Business      @relation(fields: [businessId],references: [id])
+  business          Business      @relation(fields: [businessId], references: [id])
   businessId        String
   createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
 
-  @@index([businessId,clientId])
+  @@index([businessId, clientId])
   @@map("follow_ups")
-  
 }
 
