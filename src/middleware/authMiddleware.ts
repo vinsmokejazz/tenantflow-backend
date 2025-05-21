@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express"
+import { supabaseAdmin } from "../config/supabase";
 
 export const authenticateUser = async (
   req: Request,
@@ -12,7 +13,9 @@ export const authenticateUser = async (
     res.status(401).json({
       error: "Authorization token required"
     });
+    return;
   }
 
+  //need implement verfying logic
   
 }
