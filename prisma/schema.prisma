@@ -13,12 +13,14 @@ datasource db {
 model Business {
   id                    String     @id @default(uuid())
   name                  String
+  subscription          String     @default("free")
   users                 User[]
   clients               Client[]
   leads                 Lead[]
   followUps             FollowUp[]
   createdAt             DateTime   @default(now()) @map("created_at")
   updatedAt             DateTime   @updatedAt @map("updated_at")
+ 
 
   @@map("businesses")
   @@schema("public")
