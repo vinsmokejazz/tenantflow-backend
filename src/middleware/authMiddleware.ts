@@ -2,12 +2,10 @@ import { Request, Response, NextFunction } from "express";
 import { supabaseAdmin } from "../config/supabase";
 import { User } from "@supabase/supabase-js";
 
-interface AuthenticatedRequest extends Request {
-  user?: User;
-}
+
 
 export const authenticateUser = async (
-  req: AuthenticatedRequest,
+  req: Request,
   res: Response,
   next: NextFunction
 ) => {
@@ -17,6 +15,7 @@ export const authenticateUser = async (
     return res.status(401).json({ error: "Authorization token required" });
   }
 
+  //destructured access
   const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
 
   if (error || !user) {
