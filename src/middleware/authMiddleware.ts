@@ -22,6 +22,14 @@ export const authenticateUser = async (
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 
-  req.user = user;
+  const role = user?.user_metadata?.role || "staff";
+  const business_id = user?.user_metadata?.business_id;
+
+  req.user = {
+    id: user.id,
+    email: user.email,
+    role,
+    business_id,
+  }
   next();
 };

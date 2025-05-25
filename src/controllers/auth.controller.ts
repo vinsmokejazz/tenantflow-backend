@@ -4,8 +4,8 @@ import { supabaseAdmin } from "../config/supabase";
 
 const prismaClient = new PrismaClient();
 
-const signUpBusiness = async () => {
-
+const signUpBusiness = async (req: Request, res: Response) => {
+  
   const { email, password, businessName } = req.body;
 
   const business = await prismaClient.business.create({
