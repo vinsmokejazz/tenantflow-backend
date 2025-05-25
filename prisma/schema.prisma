@@ -4,37 +4,35 @@ generator client {
 }
 
 datasource db {
-  provider   = "postgresql"
-  url        = env("DATABASE_URL")
-  directUrl  = env("DIRECT_URL")
-  schemas    = ["public"]
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+  schemas   = ["public"]
 }
 
 model Business {
-  id                    String     @id @default(uuid())
-  name                  String
-  subscription          String     @default("free")
-  users                 User[]
-  clients               Client[]
-  leads                 Lead[]
-  followUps             FollowUp[]
-  createdAt             DateTime   @default(now()) @map("created_at")
-  updatedAt             DateTime   @updatedAt @map("updated_at")
- 
+  id           String     @id @default(uuid())
+  name         String
+  subscription String     @default("free")
+  users        User[]
+  clients      Client[]
+  leads        Lead[]
+  followUps    FollowUp[]
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
 
   @@map("businesses")
   @@schema("public")
 }
 
 model User {
-  id                    String   @id @default(uuid())
-  email                 String   @unique
-  role                  String   @default("staff")
-  business              Business @relation(fields: [businessId], references: [id])
-  businessId            String
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
-
+  id         String   @id @default(uuid())
+  email      String   @unique
+  role       String   @default("staff")
+  business   Business @relation(fields: [businessId], references: [id])
+  businessId String   @map("business_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   @@index([businessId])
   @@map("users")
@@ -42,16 +40,16 @@ model User {
 }
 
 model Client {
-  id                      String    @id @default(uuid())
-  name                    String
-  email                   String?
-  phone                   String?
-  business                Business  @relation(fields: [businessId], references: [id])
-  businessId              String
-  leads                   Lead[]
-  followUps               FollowUp[]
-  createdAt               DateTime  @default(now()) @map("created_at")
-  updatedAt               DateTime  @updatedAt @map("updated_at")
+  id         String     @id @default(uuid())
+  name       String
+  email      String?
+  phone      String?
+  business   Business   @relation(fields: [businessId], references: [id])
+  businessId String     @map("business_id")
+  leads      Lead[]
+  followUps  FollowUp[]
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
 
   @@index([businessId])
   @@map("clients")
@@ -59,15 +57,15 @@ model Client {
 }
 
 model Lead {
-  id                        String    @id @default(uuid())
-  status                    String    @default("new")
-  notes                     String?
-  client                    Client    @relation(fields: [clientId], references: [id])
-  clientId                  String
-  business                  Business  @relation(fields: [businessId], references: [id])
-  businessId                String
-  createdAt                 DateTime  @default(now()) @map("created_at")
-  updatedAt                 DateTime  @updatedAt @map("updated_at")
+  id         String   @id @default(uuid())
+  status     String   @default("new")
+  notes      String?
+  client     Client   @relation(fields: [clientId], references: [id])
+  clientId   String
+  business   Business @relation(fields: [businessId], references: [id])
+  businessId String   @map("business_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   @@index([businessId, clientId])
   @@map("leads")
@@ -75,16 +73,16 @@ model Lead {
 }
 
 model FollowUp {
-  id                          String    @id @default(uuid())
-  notes                       String
-  dueDate                     DateTime
-  completed                   Boolean   @default(false)
-  client                      Client    @relation(fields: [clientId], references: [id])
-  clientId                    String
-  business                    Business  @relation(fields: [businessId], references: [id])
-  businessId                  String
-  createdAt                   DateTime  @default(now()) @map("created_at")
-  updatedAt                   DateTime  @updatedAt @map("updated_at")
+  id         String   @id @default(uuid())
+  notes      String
+  dueDate    DateTime
+  completed  Boolean  @default(false)
+  client     Client   @relation(fields: [clientId], references: [id])
+  clientId   String
+  business   Business @relation(fields: [businessId], references: [id])
+  businessId String   @map("business_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   @@index([businessId, clientId])
   @@map("follow_ups")
