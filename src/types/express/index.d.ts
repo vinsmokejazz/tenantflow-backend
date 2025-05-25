@@ -4,9 +4,9 @@ declare module 'express'{
   export interface Request{
     user?: {
       id: string,
-      email?: string,
-      role?: string,
-      business_id?:string;
+      email: string,
+      role: string,
+      business_id:string;
     }
   }
 }

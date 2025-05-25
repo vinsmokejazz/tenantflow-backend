@@ -27,7 +27,7 @@ export const authenticateUser = async (
 
   req.user = {
     id: user.id,
-    email: user.email,
+    email: user.email!,
     role,
     business_id,
   }
