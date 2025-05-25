@@ -50,9 +50,9 @@ export const signUpBusiness = async (req: Request, res: Response) => {
 export const signupStaff = async (req: Request, res: Response) => {
 
   const { email, password } = req.body;
-  const business_id = req.user?.business_id;
+  const businessId = req.user?.business_id;
 
-  if (!business_id) {
+  if (!businessId) {
     return res.status(403).json({ error: "not authorized to create users" });
   }
 
@@ -61,7 +61,7 @@ export const signupStaff = async (req: Request, res: Response) => {
     password,
     user_metadata: {
       role: "staff",
-      business_id: business_id,
+      business_id: businessId,
     }
   });
 
@@ -75,12 +75,13 @@ export const signupStaff = async (req: Request, res: Response) => {
     data: {
       id: data.user.id,
       email,
-      role:"staff",
-    
+      role: "staff",
+      businessId,
+
 
     }
   });
 
-  res.status(201).json({mssg:"Staff user created"});
+  res.status(201).json({ mssg: "Staff user created" });
 
 };
