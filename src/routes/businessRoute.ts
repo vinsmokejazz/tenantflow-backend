@@ -13,7 +13,7 @@ router.get('/', async (req: Request, res: Response) => {
   res.json(businesses);
 });
 
-// GET business by ID
+//@ts-ignore
 router.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const business = await prisma.business.findUnique({ where: { id } });

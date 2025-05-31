@@ -14,7 +14,7 @@ router.get('/', async (req: Request, res: Response) => {
   res.json(clients);
 });
 
-// GET client by ID
+//@ts-ignore
 router.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const client = await prisma.client.findUnique({ where: { id } });

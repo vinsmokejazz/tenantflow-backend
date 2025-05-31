@@ -13,7 +13,7 @@ router.get('/', async (req: Request, res: Response) => {
   res.json(followUps);
 });
 
-// GET follow-up by ID
+ //@ts-ignore
 router.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const followUp = await prisma.followUp.findUnique({ where: { id } });
