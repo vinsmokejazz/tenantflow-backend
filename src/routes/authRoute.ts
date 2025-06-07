@@ -1,11 +1,17 @@
-import express, { RequestHandler } from 'express';
-import { signUpBusiness,signupStaff } from '../controllers/auth.controller';
-import { authenticateUser } from '../middleware/authMiddleware';
+import express from 'express';
+import { signUpBusiness, signupStaff } from '../controllers/auth.controller';
+import { authenticateUser, requireRole } from '../middleware/authMiddleware';
 
-const authRouter= express.Router();
+const authRouter = express.Router();
 
-authRouter.post('/signup/business',signUpBusiness);
-authRouter.post('/signup/staff',authenticateUser as RequestHandler
-  ,signupStaff as RequestHandler);
+// Public routes
+authRouter.post('/signup/business', signUpBusiness);
+
+// Protected routes
+authRouter.post('/signup/staff', 
+  authenticateUser,
+  requireRole(['admin']),
+  signupStaff
+);
 
 export default authRouter;

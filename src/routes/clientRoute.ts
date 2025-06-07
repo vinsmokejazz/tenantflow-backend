@@ -1,7 +1,8 @@
-import express, { Request, Response, NextFunction, RequestHandler } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
-import { authenticateUser } from '../middleware/authMiddleware';
+import { authenticateUser, requireRole } from '../middleware/authMiddleware';
+import { checkClientLimit } from '../controllers/auth.controller';
 
 const clientRouter = express.Router();
 const prisma = new PrismaClient();
@@ -10,55 +11,66 @@ const prisma = new PrismaClient();
 clientRouter.use(cors());
 
 // Protect all routes with authentication
-clientRouter.use(authenticateUser as RequestHandler);
+clientRouter.use(authenticateUser);
 
-// GET all clients for the authenticated business
-clientRouter.get('/', (async (req: Request, res: Response, next: NextFunction) => {
+// GET all clients - accessible by both admin and staff
+clientRouter.get('/', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const businessId = req.user?.business_id;
-
+  
   try {
     const clients = await prisma.client.findMany({
-      where: { businessId },
+      where: { businessId }
     });
     res.json(clients);
   } catch (error: any) {
     next(error);
   }
-}) as RequestHandler);
+});
 
-// GET single client by ID (only if it belongs to user's business)
-clientRouter.get('/:id', (async (req: Request, res: Response, next: NextFunction) => {
+// GET single client - accessible by both admin and staff
+clientRouter.get('/:id', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { id } = req.params;
   const businessId = req.user?.business_id;
 
   try {
     const client = await prisma.client.findFirst({
-      where: {
+      where: { 
         id,
-        businessId,
-      },
+        businessId
+      }
     });
-
+    
     if (!client) {
-      return res.status(404).json({ error: 'Client not found' });
+      res.status(404).json({ error: 'Client not found' });
+      return;
     }
-
+    
     res.json(client);
   } catch (error: any) {
     next(error);
   }
-}) as RequestHandler);
+});
 
-// POST new client
-clientRouter.post('/', (async (req: Request, res: Response, next: NextFunction) => {
+// POST new client - admin only
+clientRouter.post('/', requireRole(['admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { name, email, phone } = req.body;
   const businessId = req.user?.business_id;
 
   if (!businessId) {
-    return res.status(403).json({ error: "Unauthorized: missing business ID" });
+    res.status(403).json({ error: "Unauthorized: missing business ID" });
+    return;
   }
 
   try {
+    // Check client limit for free tier
+    const canAddClient = await checkClientLimit(businessId);
+    if (!canAddClient) {
+      res.status(403).json({ 
+        error: "Client limit reached. Please upgrade your subscription to add more clients." 
+      });
+      return;
+    }
+
     const client = await prisma.client.create({
       data: {
         name,
@@ -72,58 +84,60 @@ clientRouter.post('/', (async (req: Request, res: Response, next: NextFunction) 
   } catch (error: any) {
     next(error);
   }
-}) as RequestHandler);
+});
 
-// PUT update client
-clientRouter.put('/:id', (async (req: Request, res: Response, next: NextFunction) => {
+// PUT update client - admin only
+clientRouter.put('/:id', requireRole(['admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { id } = req.params;
   const { name, email, phone } = req.body;
   const businessId = req.user?.business_id;
 
   try {
     const client = await prisma.client.updateMany({
-      where: {
+      where: { 
         id,
-        businessId,
+        businessId
       },
-      data: {
+      data: { 
         name,
         email,
-        phone,
+        phone
       },
     });
 
     if (client.count === 0) {
-      return res.status(404).json({ error: 'Client not found or not authorized' });
+      res.status(404).json({ error: 'Client not found or not authorized' });
+      return;
     }
 
     res.json({ message: 'Client updated successfully' });
   } catch (error: any) {
     next(error);
   }
-}) as RequestHandler);
+});
 
-// DELETE client
-clientRouter.delete('/:id', (async (req: Request, res: Response, next: NextFunction) => {
+// DELETE client - admin only
+clientRouter.delete('/:id', requireRole(['admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { id } = req.params;
   const businessId = req.user?.business_id;
 
   try {
     const deleted = await prisma.client.deleteMany({
-      where: {
+      where: { 
         id,
-        businessId,
-      },
+        businessId
+      }
     });
 
     if (deleted.count === 0) {
-      return res.status(404).json({ error: 'Client not found or not authorized' });
+      res.status(404).json({ error: 'Client not found or not authorized' });
+      return;
     }
 
     res.status(204).send();
   } catch (error: any) {
     next(error);
   }
-}) as RequestHandler);
+});
 
 export default clientRouter;
