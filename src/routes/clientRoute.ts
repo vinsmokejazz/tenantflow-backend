@@ -2,28 +2,29 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
 
-const router = express.Router();
+const clientRouter = express.Router();
 const prisma = new PrismaClient();
 
 // Enable CORS for all routes
-router.use(cors());
+clientRouter.use(cors());
 
 // GET all clients
-router.get('/', async (req: Request, res: Response) => {
+clientRouter.get('/', async (req: Request, res: Response) => {
   const clients = await prisma.client.findMany();
   res.json(clients);
 });
 
-//@ts-ignore
-router.get('/:id', async (req: Request, res: Response) => {
+// GET client by ID
+clientRouter.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const client = await prisma.client.findUnique({ where: { id } });
-  if (!client) return res.status(404).json({ error: 'Client not found' });
+  if (!client) 
+    res.status(404).json({ error: 'Client not found' });
   res.json(client);
 });
 
 // POST new client
-router.post('/', async (req: Request, res: Response) => {
+clientRouter.post('/', async (req: Request, res: Response) => {
   const { name, email, phone, businessId } = req.body;
   const client = await prisma.client.create({
     data: { name, email, phone, businessId },
@@ -32,7 +33,7 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // PUT update client
-router.put('/:id', async (req: Request, res: Response) => {
+clientRouter.put('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, email, phone, businessId } = req.body;
   const client = await prisma.client.update({
@@ -43,10 +44,10 @@ router.put('/:id', async (req: Request, res: Response) => {
 });
 
 // DELETE client
-router.delete('/:id', async (req: Request, res: Response) => {
+clientRouter.delete('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   await prisma.client.delete({ where: { id } });
   res.status(204).send();
 });
 
-export default router;
+export default clientRouter;
