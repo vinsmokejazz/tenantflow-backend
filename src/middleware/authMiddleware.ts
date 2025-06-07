@@ -1,7 +1,5 @@
 import { Request, Response, NextFunction } from "express";
 import { supabaseAdmin } from "../config/supabase";
-import { User } from "@supabase/supabase-js";
-
 
 
 export const authenticateUser = async (

@@ -1,11 +1,11 @@
 import { PrismaClient } from "@prisma/client";
-import { Request, Response } from "express";
+import { Request, RequestHandler, Response } from "express";
 import { supabaseAdmin } from "../config/supabase";
 
 const prismaClient = new PrismaClient();
 
 
-export const signUpBusiness = async (req: Request, res: Response) => {
+export const signUpBusiness:RequestHandler= async (req: Request, res: Response) => {
 
   const { email, password, businessName } = req.body;
   try {
