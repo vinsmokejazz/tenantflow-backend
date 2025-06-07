@@ -1,59 +1,117 @@
+import express, { Request, Response, NextFunction, RequestHandler } from 'express';
+import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
-import express ,{Request,Response} from 'express';
-import cors from'cors';
-const businessRouter=express.Router();
-const prisma= new PrismaClient();
+import { authenticateUser } from '../middleware/authMiddleware';
+
+const businessRouter = express.Router();
+const prisma = new PrismaClient();
 
 businessRouter.use(cors());
+businessRouter.use(authenticateUser as RequestHandler);
 
-businessRouter.get('/', async (req:Request,res:Response)=>{
-  const business= await prisma.business.findMany();
-  res.json(business);
-});
-
-businessRouter.get('/:id', async(req:Request,res:Response)=>{
-  const {id}=req.params;
-  const business=await prisma.business.findUnique({where:{id}});
-  if(!business){
-     res.status(404).json({error:"Business not found"});
+businessRouter.get('/', (async (req: Request, res: Response, next: NextFunction) => {
+  const businessId = req.user?.business_id;
+  
+  try {
+    const business = await prisma.business.findFirst({
+      where: { id: businessId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    res.json(business);
+  } catch (error: any) {
+    next(error);
   }
-  res.json(business);
-});
+}) as RequestHandler);
 
+businessRouter.get('/:id', (async (req: Request, res: Response, next: NextFunction) => {
+  const { id } = req.params;
+  const businessId = req.user?.business_id;
 
-businessRouter.post('/', async(req:Request,res:Response)=>{
-  const{name,subscription}=req.body;
-  const business=await prisma.business.create({
-    data:{
-      name,
-      subscription,
-    },
-  });
-  res.status(201).json("successfully created business");
-  res.json(business);
-})
+  if (id !== businessId) {
+    return res.status(403).json({ error: 'Not authorized to access this business' });
+  }
 
+  try {
+    const business = await prisma.business.findUnique({
+      where: { id }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    res.json(business);
+  } catch (error: any) {
+    next(error);
+  }
+}) as RequestHandler);
+
+businessRouter.post('/', (async (req: Request, res: Response, next: NextFunction) => {
+  const { name, subscription } = req.body;
+  const businessId = req.user?.business_id;
+
+  if (!businessId) {
+    return res.status(403).json({ error: "Unauthorized: missing business ID" });
+  }
+
+  try {
+    const business = await prisma.business.create({
+      data: {
+        id: businessId,
+        name,
+        subscription,
+      },
+    });
+    res.status(201).json(business);
+  } catch (error: any) {
+    next(error);
+  }
+}) as RequestHandler);
 
 //PUT update business
-businessRouter.put('/:id', async(req:Request,res:Response)=>{
-  const{id}=req.params;
-  const{name,subscription}= req.body;
-  const business=await prisma.business.update({
-    where:{id},
-    data:{
-      name,subscription
-    }
-  });
-  res.status(201).json("Business updated successfully");
-  res.json(business);
-});
+businessRouter.put('/:id', (async (req: Request, res: Response, next: NextFunction) => {
+  const { id } = req.params;
+  const { name, subscription } = req.body;
+  const businessId = req.user?.business_id;
 
-businessRouter.delete('/:id',async(req:Request,res:Response)=>{
-  const {id}= req.params;
-  await prisma.business.delete({
-    where:{id}
-  });
-  res.status(204).send();
-});
+  if (id !== businessId) {
+    return res.status(403).json({ error: 'Not authorized to update this business' });
+  }
+
+  try {
+    const business = await prisma.business.update({
+      where: { id },
+      data: {
+        name,
+        subscription
+      }
+    });
+    res.json(business);
+  } catch (error: any) {
+    next(error);
+  }
+}) as RequestHandler);
+
+businessRouter.delete('/:id', (async (req: Request, res: Response, next: NextFunction) => {
+  const { id } = req.params;
+  const businessId = req.user?.business_id;
+
+  if (id !== businessId) {
+    return res.status(403).json({ error: 'Not authorized to delete this business' });
+  }
+
+  try {
+    await prisma.business.delete({
+      where: { id }
+    });
+    res.status(204).send();
+  } catch (error: any) {
+    next(error);
+  }
+}) as RequestHandler);
 
 export default businessRouter;
