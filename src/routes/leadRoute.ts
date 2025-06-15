@@ -18,8 +18,9 @@ LeadRouter.get('/', (async (req: Request, res: Response, next: NextFunction) => 
       where: { businessId }
     });
     res.json(leads);
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 
@@ -36,12 +37,14 @@ LeadRouter.get('/:id', (async (req: Request, res: Response, next: NextFunction) 
     });
     
     if (!lead) {
-      return res.status(404).json({ error: 'Lead not found' });
+      res.status(404).json({ error: 'Lead not found' });
+      return;
     }
     
     res.json(lead);
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 
@@ -51,7 +54,8 @@ LeadRouter.post('/', (async (req: Request, res: Response, next: NextFunction) =>
   const businessId = req.user?.business_id;
 
   if (!businessId) {
-    return res.status(403).json({ error: "Unauthorized: missing business ID" });
+    res.status(403).json({ error: "Unauthorized: missing business ID" });
+    return;
   }
 
   try {
@@ -64,60 +68,37 @@ LeadRouter.post('/', (async (req: Request, res: Response, next: NextFunction) =>
       },
     });
     res.status(201).json(lead);
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 
 // PUT update lead
 LeadRouter.put('/:id', (async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
-  const { status, notes, clientId } = req.body;
-  const businessId = req.user?.business_id;
-
+  const { status, notes } = req.body;
   try {
-    const lead = await prisma.lead.updateMany({
-      where: { 
-        id,
-        businessId
-      },
-      data: { 
-        status, 
-        notes, 
-        clientId
-      },
+    const lead = await prisma.lead.update({
+      where: { id },
+      data: { status, notes },
     });
-
-    if (lead.count === 0) {
-      return res.status(404).json({ error: 'Lead not found or not authorized' });
-    }
-
-    res.json({ message: 'Lead updated successfully' });
+    res.json(lead);
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 
 // DELETE lead
 LeadRouter.delete('/:id', (async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
-  const businessId = req.user?.business_id;
-
   try {
-    const deleted = await prisma.lead.deleteMany({
-      where: { 
-        id,
-        businessId
-      }
-    });
-
-    if (deleted.count === 0) {
-      return res.status(404).json({ error: 'Lead not found or not authorized' });
-    }
-
+    await prisma.lead.delete({ where: { id } });
     res.status(204).send();
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 

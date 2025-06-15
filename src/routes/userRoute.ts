@@ -18,8 +18,9 @@ UserRouter.get('/', (async (req: Request, res: Response, next: NextFunction) => 
       where: { businessId }
     });
     res.json(users);
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 
@@ -36,12 +37,14 @@ UserRouter.get('/:id', (async (req: Request, res: Response, next: NextFunction) 
     });
     
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      res.status(404).json({ error: 'User not found' });
+      return;
     }
     
     res.json(user);
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 
@@ -51,7 +54,8 @@ UserRouter.post('/', (async (req: Request, res: Response, next: NextFunction) =>
   const businessId = req.user?.business_id;
 
   if (!businessId) {
-    return res.status(403).json({ error: "Unauthorized: missing business ID" });
+    res.status(403).json({ error: "Unauthorized: missing business ID" });
+    return;
   }
 
   try {
@@ -63,8 +67,9 @@ UserRouter.post('/', (async (req: Request, res: Response, next: NextFunction) =>
       },
     });
     res.status(201).json(user);
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 
@@ -72,50 +77,27 @@ UserRouter.post('/', (async (req: Request, res: Response, next: NextFunction) =>
 UserRouter.put('/:id', (async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
   const { email, role } = req.body;
-  const businessId = req.user?.business_id;
-
   try {
-    const user = await prisma.user.updateMany({
-      where: { 
-        id,
-        businessId
-      },
-      data: { 
-        email, 
-        role
-      },
+    const user = await prisma.user.update({
+      where: { id },
+      data: { email, role },
     });
-
-    if (user.count === 0) {
-      return res.status(404).json({ error: 'User not found or not authorized' });
-    }
-
-    res.json({ message: 'User updated successfully' });
+    res.json(user);
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 
 // DELETE user
 UserRouter.delete('/:id', (async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
-  const businessId = req.user?.business_id;
-
   try {
-    const deleted = await prisma.user.deleteMany({
-      where: { 
-        id,
-        businessId
-      }
-    });
-
-    if (deleted.count === 0) {
-      return res.status(404).json({ error: 'User not found or not authorized' });
-    }
-
+    await prisma.user.delete({ where: { id } });
     res.status(204).send();
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 

@@ -26,100 +26,64 @@ FollowUpRouter.get('/', (async (req: Request, res: Response, next: NextFunction)
 FollowUpRouter.get('/:id', (async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
   const businessId = req.user?.business_id;
-
   try {
-    const followUp = await prisma.followUp.findFirst({
-      where: { 
-        id,
-        businessId
-      }
-    });
-    
+    const followUp = await prisma.followUp.findFirst({ where: { id, businessId } });
     if (!followUp) {
-      return res.status(404).json({ error: 'FollowUp not found' });
+      res.status(404).json({ error: 'Follow-up not found' });
+      return;
     }
-    
     res.json(followUp);
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 
 // POST new follow-up
 FollowUpRouter.post('/', (async (req: Request, res: Response, next: NextFunction) => {
-  const { notes, dueDate, completed, clientId } = req.body;
+  const { notes, dueDate, clientId } = req.body;
   const businessId = req.user?.business_id;
-
   if (!businessId) {
-    return res.status(403).json({ error: "Unauthorized: missing business ID" });
+    res.status(403).json({ error: "Unauthorized: missing business ID" });
+    return;
   }
-
   try {
     const followUp = await prisma.followUp.create({
-      data: { 
-        notes, 
-        dueDate, 
-        completed, 
-        clientId, 
-        businessId 
-      },
+      data: { notes, dueDate, clientId, businessId },
     });
     res.status(201).json(followUp);
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 
 // PUT update follow-up
 FollowUpRouter.put('/:id', (async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
-  const { notes, dueDate, completed, clientId } = req.body;
+  const { notes, dueDate, completed } = req.body;
   const businessId = req.user?.business_id;
-
   try {
-    const followUp = await prisma.followUp.updateMany({
-      where: { 
-        id,
-        businessId
-      },
-      data: { 
-        notes, 
-        dueDate, 
-        completed, 
-        clientId
-      },
+    const followUp = await prisma.followUp.update({
+      where: { id },
+      data: { notes, dueDate, completed, businessId },
     });
-
-    if (followUp.count === 0) {
-      return res.status(404).json({ error: 'FollowUp not found or not authorized' });
-    }
-
-    res.json({ message: 'FollowUp updated successfully' });
+    res.json(followUp);
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 
 // DELETE follow-up
 FollowUpRouter.delete('/:id', (async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
-  const businessId = req.user?.business_id;
-
   try {
-    const deleted = await prisma.followUp.deleteMany({
-      where: { 
-        id,
-        businessId
-      }
-    });
-
-    if (deleted.count === 0) {
-      return res.status(404).json({ error: 'FollowUp not found or not authorized' });
-    }
-
+    await prisma.followUp.delete({ where: { id } });
     res.status(204).send();
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 

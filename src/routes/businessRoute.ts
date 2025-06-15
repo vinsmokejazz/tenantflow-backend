@@ -18,12 +18,14 @@ businessRouter.get('/', (async (req: Request, res: Response, next: NextFunction)
     });
     
     if (!business) {
-      return res.status(404).json({ error: 'Business not found' });
+      res.status(404).json({ error: 'Business not found' });
+      return;
     }
     
     res.json(business);
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 
@@ -32,7 +34,8 @@ businessRouter.get('/:id', (async (req: Request, res: Response, next: NextFuncti
   const businessId = req.user?.business_id;
 
   if (id !== businessId) {
-    return res.status(403).json({ error: 'Not authorized to access this business' });
+    res.status(403).json({ error: 'Not authorized to access this business' });
+    return;
   }
 
   try {
@@ -41,12 +44,14 @@ businessRouter.get('/:id', (async (req: Request, res: Response, next: NextFuncti
     });
     
     if (!business) {
-      return res.status(404).json({ error: 'Business not found' });
+      res.status(404).json({ error: 'Business not found' });
+      return;
     }
     
     res.json(business);
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 
@@ -55,7 +60,8 @@ businessRouter.post('/', (async (req: Request, res: Response, next: NextFunction
   const businessId = req.user?.business_id;
 
   if (!businessId) {
-    return res.status(403).json({ error: "Unauthorized: missing business ID" });
+    res.status(403).json({ error: "Unauthorized: missing business ID" });
+    return;
   }
 
   try {
@@ -67,8 +73,9 @@ businessRouter.post('/', (async (req: Request, res: Response, next: NextFunction
       },
     });
     res.status(201).json(business);
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 
@@ -79,7 +86,8 @@ businessRouter.put('/:id', (async (req: Request, res: Response, next: NextFuncti
   const businessId = req.user?.business_id;
 
   if (id !== businessId) {
-    return res.status(403).json({ error: 'Not authorized to update this business' });
+    res.status(403).json({ error: 'Not authorized to update this business' });
+    return;
   }
 
   try {
@@ -91,8 +99,9 @@ businessRouter.put('/:id', (async (req: Request, res: Response, next: NextFuncti
       }
     });
     res.json(business);
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 
@@ -101,7 +110,8 @@ businessRouter.delete('/:id', (async (req: Request, res: Response, next: NextFun
   const businessId = req.user?.business_id;
 
   if (id !== businessId) {
-    return res.status(403).json({ error: 'Not authorized to delete this business' });
+    res.status(403).json({ error: 'Not authorized to delete this business' });
+    return;
   }
 
   try {
@@ -109,8 +119,9 @@ businessRouter.delete('/:id', (async (req: Request, res: Response, next: NextFun
       where: { id }
     });
     res.status(204).send();
+    return;
   } catch (error: any) {
-    next(error);
+    next(error); return;
   }
 }) as RequestHandler);
 
