@@ -12,7 +12,7 @@ datasource db {
 }
 
 model Business {
-  id           String     @id @default(uuid())
+  id           String     @id @default(uuid()) @db.Uuid
   name         String
   subscription String     @default("free")
   users        User[]
@@ -28,18 +28,18 @@ model Business {
 }
 
 model User {
-  id              String    @id @default(uuid())
-  supabase_id     String    @unique
-  email           String    @unique
-  password        String?   // Optional since Supabase handles auth
-  name            String
-  role            String    @default("staff")
-  business        Business  @relation(fields: [businessId], references: [id])
-  businessId      String    @map("business_id")
-  resetToken      String?
+  id                String    @id @default(uuid()) @db.Uuid
+  supabase_id       String    @unique @db.Uuid
+  email             String    @unique
+  password          String?   // Optional since Supabase handles auth
+  name              String
+  role              String    @default("staff")
+  business          Business  @relation(fields: [businessId], references: [id])
+  businessId        String    @map("business_id") @db.Uuid
+  resetToken        String?
   resetTokenExpires DateTime?
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   @@index([businessId])
   @@map("users")
@@ -47,12 +47,12 @@ model User {
 }
 
 model Client {
-  id         String     @id @default(uuid())
+  id         String     @id @default(uuid()) @db.Uuid
   name       String
   email      String?
   phone      String?
   business   Business   @relation(fields: [businessId], references: [id])
-  businessId String     @map("business_id")
+  businessId String     @map("business_id") @db.Uuid
   leads      Lead[]
   followUps  FollowUp[]
   createdAt  DateTime   @default(now()) @map("created_at")
@@ -64,13 +64,13 @@ model Client {
 }
 
 model Lead {
-  id         String   @id @default(uuid())
+  id         String   @id @default(uuid()) @db.Uuid
   status     String   @default("new")
   notes      String?
   client     Client   @relation(fields: [clientId], references: [id])
-  clientId   String
+  clientId   String   @db.Uuid
   business   Business @relation(fields: [businessId], references: [id])
-  businessId String   @map("business_id")
+  businessId String   @map("business_id") @db.Uuid
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
@@ -80,14 +80,14 @@ model Lead {
 }
 
 model FollowUp {
-  id         String   @id @default(uuid())
+  id         String   @id @default(uuid()) @db.Uuid
   notes      String
   dueDate    DateTime
   completed  Boolean  @default(false)
   client     Client   @relation(fields: [clientId], references: [id])
-  clientId   String
+  clientId   String   @db.Uuid
   business   Business @relation(fields: [businessId], references: [id])
-  businessId String   @map("business_id")
+  businessId String   @map("business_id") @db.Uuid
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
@@ -97,9 +97,9 @@ model FollowUp {
 }
 
 model Analytics {
-  id         String   @id @default(uuid())
+  id         String   @id @default(uuid()) @db.Uuid
   business   Business @relation(fields: [businessId], references: [id])
-  businessId String   @map("business_id")
+  businessId String   @map("business_id") @db.Uuid
   date       DateTime
   metrics    Json
   aiInsights Json?
