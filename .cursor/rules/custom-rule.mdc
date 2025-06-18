@@ -3,91 +3,22 @@ description:
 globs: 
 alwaysApply: true
 ---
-rules:
-  - id: remove-jwt-secret-from-config
-    description: Remove JWT_SECRET from required env config
-    target: "src/config/config.ts"
-    find: |
-      JWT_SECRET: z.string(),
-    replace: ""
-
-  - id: keep-openai-required
-    description: Keep OPENAI_API_KEY as required (no change)
-    target: "src/config/config.ts"
-    find: |
-      OPENAI_API_KEY: z.string(),
-    replace: |
-      OPENAI_API_KEY: z.string(),
-
-  - id: remove-jwt-secret-from-env-example
-    description: Remove JWT_SECRET from .env.example
-    target: ".env.example"
-    find: |
-      JWT_SECRET=.*\n?
-    replace: ""
-
-  - id: delete-local-jwt-utils
-    description: Delete jwt.ts utility file (not needed with Supabase)
-    target: "src/utils/jwt.ts"
-    action: delete
-
-  - id: remove-jwt-imports
-    description: Remove jsonwebtoken import in all controllers
-    target: "src/controllers/**/*.ts"
-    find: |
-      import jwt from "jsonwebtoken";
-    replace: ""
-
-  - id: uninstall-jsonwebtoken-package
-    description: Remove jsonwebtoken from dependencies
-    target: "package.json"
-    find: |
-      "jsonwebtoken": "[^"]+",\n?
-    replace: ""
-
-  - id: add-supabase-auth-middleware
-    description: Add Supabase auth middleware to src/middleware/authMiddleware.ts
-    target: "src/middleware/authMiddleware.ts"
-    replace: |
-      import { Request, Response, NextFunction } from "express";
-      import { createClient } from "@supabase/supabase-js";
-
-      const supabase = createClient(
-        process.env.SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-      );
-
-      export const protect = async (req: Request, res: Response, next: NextFunction) => {
-        const token = req.headers.authorization?.split("Bearer ")[1];
-        if (!token) return res.status(401).json({ error: "Missing token" });
-
-        const { data: { user }, error } = await supabase.auth.getUser(token);
-        if (error || !user) return res.status(401).json({ error: "Invalid token" });
-
-        req.user = user;
-        next();
-      };
-
-  - id: extend-express-request-type
-    description: Add user type extension to Express request
-    target: "src/types/express/index.d.ts"
-    replace: |
-      declare namespace Express {
-        interface Request {
-          user?: any;
-        }
-      }
-
-  - id: apply-auth-middleware-to-business-routes
-    description: Add Supabase protect middleware to business routes
-    target: "src/routes/businessRoute.ts"
-    find: |
-      import { Router } from "express";
-    replace: |
-      import { Router } from "express";
-      import { protect } from "../middleware/authMiddleware";
-
-    after: |
-      const router = Router();
-    insert: |
-      router.use(protect);
+{
+  "metadata": {
+    "name": "Fix Supabase Auth Metadata with business_id",
+    "description": "Automatically rewrites signUpBusiness to attach business_id to Supabase user metadata after creation. Required for RLS to work properly.",
+    "tags": ["supabase", "auth", "rls", "metadata"],
+    "ruleType": "auto attached"
+  },
+  "matches": [
+    {
+      "include": "**/controllers/authController.ts"
+    }
+  ],
+  "replaces": [
+    {
+      "pattern": ".*",
+      "replacement": "import { PrismaClient } from \"@prisma/client\";\nimport { Request, Response } from \"express\";\nimport { supabaseAdmin } from \"../config/supabase\";\n\nconst prisma = new PrismaClient();\n\nexport const signUpBusiness = async (req: Request, res: Response) => {\n  try {\n    const { email, password, name, address } = req.body;\n\n    // Step 1: Create Supabase user\n    const { data: userData, error: createUserError } = await supabaseAdmin.auth.admin.createUser({\n      email,\n      password,\n      user_metadata: {\n        name\n      }\n    });\n\n    if (createUserError || !userData?.user) {\n      return res.status(400).json({ error: createUserError?.message || \"Supabase user creation failed\" });\n    }\n\n    const supabaseUser = userData.user;\n\n    // Step 2: Create business in your own database\n    const business = await prisma.business.create({\n      data: {\n        name,\n        address,\n        userId: supabaseUser.id\n      }\n    });\n\n    // Step 3: Update Supabase user metadata with business_id (required for RLS)\n    const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(supabaseUser.id, {\n      user_metadata: {\n        name,\n        business_id: business.id\n      }\n    });\n\n    if (metadataError) {\n      return res.status(500).json({ error: metadataError.message });\n    }\n\n    return res.status(201).json({ user: supabaseUser, business });\n  } catch (error) {\n    console.error(\"Signup Error:\", error);\n    return res.status(500).json({ error: \"Internal Server Error\" });\n  }\n};"
+    }
+  ]
+}
