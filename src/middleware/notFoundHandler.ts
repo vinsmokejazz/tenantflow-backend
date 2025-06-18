@@ -1,10 +1,11 @@
-import { Request, Response, NextFunction } from 'express';
-import { AppError } from './errorHandler';
+import { Request, Response } from 'express';
+import { logger } from '../utils/logger';
 
-export const notFoundHandler = (
-  req: Request,
-  _res: Response,
-  next: NextFunction
-) => {
-  next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
+export const notFoundHandler = (req: Request, res: Response): void => {
+  logger.warn(`Route not found: ${req.method} ${req.originalUrl}`);
+  
+  res.status(404).json({
+    status: 'error',
+    message: `Route ${req.originalUrl} not found`,
+  });
 }; 

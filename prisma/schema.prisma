@@ -18,6 +18,7 @@ model Business {
   clients      Client[]
   leads        Lead[]
   followUps    FollowUp[]
+  analytics    Analytics[]
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
@@ -26,13 +27,18 @@ model Business {
 }
 
 model User {
-  id         String   @id @default(uuid())
-  email      String   @unique
-  role       String   @default("staff")
-  business   Business @relation(fields: [businessId], references: [id])
-  businessId String   @map("business_id")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id              String    @id @default(uuid())
+  supabase_id     String    @unique
+  email           String    @unique
+  password        String?   // Optional since Supabase handles auth
+  name            String
+  role            String    @default("staff")
+  business        Business  @relation(fields: [businessId], references: [id])
+  businessId      String    @map("business_id")
+  resetToken      String?
+  resetTokenExpires DateTime?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   @@index([businessId])
   @@map("users")
@@ -86,5 +92,20 @@ model FollowUp {
 
   @@index([businessId, clientId])
   @@map("follow_ups")
+  @@schema("public")
+}
+
+model Analytics {
+  id         String   @id @default(uuid())
+  business   Business @relation(fields: [businessId], references: [id])
+  businessId String   @map("business_id")
+  date       DateTime
+  metrics    Json
+  aiInsights Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, date])
+  @@map("analytics")
   @@schema("public")
 }

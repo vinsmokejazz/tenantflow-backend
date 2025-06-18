@@ -1,25 +1,241 @@
-import { PrismaClient } from "@prisma/client";
 import { Request, Response, NextFunction } from "express";
 import { supabaseAdmin } from "../config/supabase";
-import jwt from 'jsonwebtoken';
-
-const prismaClient = new PrismaClient();
+import jwt, { SignOptions } from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import { AppError } from '../utils/error';
+import { logger } from '../utils/logger';
+import { config } from '../config/config';
+import { prisma } from '../lib/prisma';
+import { Prisma, User } from '@prisma/client';
+import { createClient } from '@supabase/supabase-js';
+import { signToken, JwtPayload } from '../utils/jwt';
 
 const FREE_TIER_CLIENT_LIMIT = 10;
 
-// Helper function to generate tokens
-const generateTokens = (userId: string) => {
-  const accessToken = jwt.sign(
-    { userId },
-    process.env.JWT_SECRET!,
-    { expiresIn: '15m' }
-  );
-  const refreshToken = jwt.sign(
-    { userId },
-    process.env.JWT_REFRESH_SECRET!,
-    { expiresIn: '7d' }
-  );
-  return { accessToken, refreshToken };
+interface AuthRequest extends Request {
+  user?: JwtPayload;
+}
+
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_ANON_KEY!
+);
+
+export const register = async (req: Request, res: Response) => {
+  try {
+    const { email, password, name, business_name, role } = req.body;
+
+    // Create user in Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    if (authError) throw new AppError(400, authError.message);
+
+    // Create business with user
+    const business = await prisma.business.create({
+      data: {
+        name: business_name,
+        users: {
+          create: {
+            supabase_id: authData.user!.id,
+            email,
+            name: name || '',
+            role: role || 'admin',
+            password: '', // Password is managed by Supabase
+          }
+        }
+      },
+      include: {
+        users: true
+      }
+    });
+
+    const user = business.users[0];
+    if (!user) throw new AppError(500, 'User creation failed');
+
+    // Generate JWT token
+    const token = signToken({
+      id: user.id,
+      email: user.email || '',
+      name: user.name || '',
+      role: user.role || 'admin',
+      businessId: user.businessId || ''
+    });
+
+    // Remove sensitive data
+    const userWithoutSensitive = user ? { ...user } : {};
+    if ('password' in userWithoutSensitive) delete userWithoutSensitive.password;
+
+    res.status(201).json({
+      status: 'success',
+      token,
+      data: {
+        user: userWithoutSensitive,
+        business
+      }
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({
+        status: 'error',
+        message: error.message
+      });
+    } else {
+      res.status(500).json({
+        status: 'error',
+        message: 'Internal server error'
+      });
+    }
+  }
+};
+
+export const login = async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
+
+    // Authenticate with Supabase
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (authError) throw new AppError(401, 'Invalid email or password');
+
+    // Get user from database
+    const user = await prisma.user.findUnique({
+      where: { supabase_id: authData.user!.id }
+    });
+
+    if (!user) throw new AppError(404, 'User not found');
+
+    // Generate JWT token
+    const token = signToken({
+      id: user.id,
+      email: user.email || '',
+      name: user.name || '',
+      role: user.role || 'admin',
+      businessId: user.businessId || ''
+    });
+
+    // Remove sensitive data
+    const userWithoutSensitive = user ? { ...user } : {};
+    if ('password' in userWithoutSensitive) delete userWithoutSensitive.password;
+
+    res.status(200).json({
+      status: 'success',
+      token,
+      data: {
+        user: userWithoutSensitive
+      }
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({
+        status: 'error',
+        message: error.message
+      });
+    } else {
+      res.status(500).json({
+        status: 'error',
+        message: 'Internal server error'
+      });
+    }
+  }
+};
+
+export const forgotPassword = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    // Send password reset email through Supabase
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${process.env.FRONTEND_URL}/reset-password`,
+    });
+
+    if (error) throw new AppError(400, error.message);
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Password reset email sent'
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({
+        status: 'error',
+        message: error.message
+      });
+    } else {
+      res.status(500).json({
+        status: 'error',
+        message: 'Internal server error'
+      });
+    }
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { password } = req.body;
+
+    // Reset password through Supabase
+    const { error } = await supabase.auth.updateUser({
+      password: password
+    });
+
+    if (error) throw new AppError(400, error.message);
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Password reset successful'
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({
+        status: 'error',
+        message: error.message
+      });
+    } else {
+      res.status(500).json({
+        status: 'error',
+        message: 'Internal server error'
+      });
+    }
+  }
+};
+
+export const updatePassword = async (req: AuthRequest, res: Response) => {
+  try {
+    const { newPassword } = req.body;
+    const userId = req.user?.id;
+
+    if (!userId) throw new AppError(401, 'User not authenticated');
+
+    // Update password through Supabase
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword
+    });
+
+    if (error) throw new AppError(400, error.message);
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Password updated successfully'
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({
+        status: 'error',
+        message: error.message
+      });
+    } else {
+      res.status(500).json({
+        status: 'error',
+        message: 'Internal server error'
+      });
+    }
+  }
 };
 
 export const signUpBusiness = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -27,7 +243,7 @@ export const signUpBusiness = async (req: Request, res: Response, next: NextFunc
   
   try {
     // Create business first
-    const business = await prismaClient.business.create({
+    const business = await prisma.business.create({
       data: {
         name: businessName,
         subscription,
@@ -47,7 +263,7 @@ export const signUpBusiness = async (req: Request, res: Response, next: NextFunc
 
     if (error) {
       // Rollback business creation if user creation fails
-      await prismaClient.business.delete({
+      await prisma.business.delete({
         where: { id: business.id }
       });
       res.status(400).json({ error: error.message });
@@ -55,7 +271,7 @@ export const signUpBusiness = async (req: Request, res: Response, next: NextFunc
     }
 
     // Create user in our database
-    await prismaClient.user.create({
+    await prisma.user.create({
       data: {
         id: data.user.id,
         email,
@@ -65,7 +281,13 @@ export const signUpBusiness = async (req: Request, res: Response, next: NextFunc
     });
 
     // Generate tokens
-    const tokens = generateTokens(data.user.id);
+    const tokens = signToken({
+      id: data.user.id,
+      email: data.user.email,
+      name: data.user.name,
+      role: data.user.role,
+      businessId: data.user.businessId,
+    });
 
     res.status(201).json({
       message: "Business and admin user created successfully",
@@ -91,7 +313,7 @@ export const signIn = async (req: Request, res: Response, next: NextFunction): P
       return;
     }
 
-    const user = await prismaClient.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: data.user.id },
       include: { business: true }
     });
@@ -101,37 +323,25 @@ export const signIn = async (req: Request, res: Response, next: NextFunction): P
       return;
     }
 
-    const tokens = generateTokens(user.id);
+    const tokens = signToken({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      businessId: user.businessId,
+    });
 
     res.json({
       user: {
         id: user.id,
         email: user.email,
+        name: user.name,
         role: user.role,
         businessId: user.businessId,
         businessName: user.business.name
       },
       ...tokens
     });
-  } catch (error: any) {
-    next(error);
-  }
-};
-
-export const resetPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  const { email } = req.body;
-
-  try {
-    const { error } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.FRONTEND_URL}/reset-password`,
-    });
-
-    if (error) {
-      res.status(400).json({ error: error.message });
-      return;
-    }
-
-    res.json({ message: "Password reset email sent" });
   } catch (error: any) {
     next(error);
   }
@@ -165,7 +375,13 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
   }
   try {
     const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!) as { userId: string };
-    const tokens = generateTokens(decoded.userId);
+    const tokens = signToken({
+      id: decoded.userId,
+      email: decoded.email,
+      name: decoded.name,
+      role: decoded.role,
+      businessId: decoded.businessId,
+    });
     res.json(tokens);
     return;
   } catch (error) {
@@ -201,7 +417,7 @@ export const signupStaff = async (req: Request, res: Response, next: NextFunctio
       return;
     }
 
-    await prismaClient.user.create({
+    await prisma.user.create({
       data: {
         id: data.user.id,
         email,
@@ -217,7 +433,7 @@ export const signupStaff = async (req: Request, res: Response, next: NextFunctio
 };
 
 export const checkClientLimit = async (businessId: string): Promise<boolean> => {
-  const clientCount = await prismaClient.client.count({
+  const clientCount = await prisma.client.count({
     where: { businessId }
   });
   

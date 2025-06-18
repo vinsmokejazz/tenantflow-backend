@@ -1,68 +1,78 @@
-import { ErrorRequestHandler } from 'express';
+import { Request, Response, NextFunction } from 'express';
+import { ZodError } from 'zod';
+import { Prisma } from '@prisma/client';
+import { logger } from '../utils/logger';
 
 export class AppError extends Error {
-  statusCode: number;
-  status: string;
-  isOperational: boolean;
-
-  constructor(message: string, statusCode: number) {
+  constructor(
+    public statusCode: number,
+    public message: string,
+    public isOperational = true,
+  ) {
     super(message);
-    this.statusCode = statusCode;
-    this.status = `${statusCode}`.startsWith('4') ? 'fail' : 'error';
-    this.isOperational = true;
-
-    Error.captureStackTrace(this, this.constructor);
+    Object.setPrototypeOf(this, AppError.prototype);
   }
 }
 
-export const errorHandler: ErrorRequestHandler = (
-  err,
-  _req,
-  res,
-  _next
-) => {
+export const errorHandler = (
+  err: Error,
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): void => {
+  logger.error('Error:', {
+    error: err,
+    path: req.path,
+    method: req.method,
+    body: req.body,
+    query: req.query,
+    params: req.params,
+  });
+
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
-      status: err.status,
+      status: 'error',
       message: err.message,
-      ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
     });
     return;
   }
 
-  // Handle Prisma errors
-  if (err.name === 'PrismaClientKnownRequestError') {
+  if (err instanceof ZodError) {
     res.status(400).json({
       status: 'error',
-      message: 'Database operation failed',
-      ...(process.env.NODE_ENV === 'development' && { details: err.message })
+      message: 'Validation error',
+      errors: err.errors,
     });
     return;
   }
 
-  // Handle JWT errors
-  if (err.name === 'JsonWebTokenError') {
-    res.status(401).json({
-      status: 'error',
-      message: 'Invalid token. Please log in again.'
-    });
-    return;
-  }
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    if (err.code === 'P2002') {
+      res.status(409).json({
+        status: 'error',
+        message: 'A record with this value already exists',
+      });
+      return;
+    }
 
-  if (err.name === 'TokenExpiredError') {
-    res.status(401).json({
+    if (err.code === 'P2025') {
+      res.status(404).json({
+        status: 'error',
+        message: 'Record not found',
+      });
+      return;
+    }
+
+    res.status(400).json({
       status: 'error',
-      message: 'Your token has expired. Please log in again.'
+      message: 'Database error',
     });
     return;
   }
 
   // Default error
-  console.error('ERROR 💥', err);
   res.status(500).json({
     status: 'error',
-    message: 'Something went wrong',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    message: 'Internal server error',
   });
-  return;
 }; 

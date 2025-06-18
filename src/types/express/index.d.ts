@@ -7,7 +7,7 @@ declare global {
         id: string;
         email: string;
         role: string;
-        business_id: string;
+        businessId: string;
       };
     }
   }

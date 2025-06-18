@@ -1,36 +1,34 @@
 import express from 'express';
 import { 
-  signUpBusiness, 
-  signupStaff, 
-  signIn, 
+  register,
+  login,
+  forgotPassword,
   resetPassword,
-  verifyEmail,
-  refreshToken
+  updatePassword
 } from '../controllers/auth.controller';
-import { authenticateUser, requireRole } from '../middleware/authMiddleware';
-import { validateRequest } from '../middleware/validationMiddleware';
+import { protect, restrictTo } from '../middleware/auth.middleware';
+import { validate } from '../middleware/validate.middleware';
 import { 
-  signUpSchema, 
-  signInSchema, 
+  registerSchema,
+  loginSchema,
+  forgotPasswordSchema,
   resetPasswordSchema,
-  verifyEmailSchema 
+  changePasswordSchema
 } from '../validations/auth.validation';
 
 const authRouter = express.Router();
 
 // Public routes
-authRouter.post('/signup/business', validateRequest(signUpSchema), signUpBusiness);
-authRouter.post('/signin', validateRequest(signInSchema), signIn);
-authRouter.post('/reset-password', validateRequest(resetPasswordSchema), resetPassword);
-authRouter.post('/verify-email', validateRequest(verifyEmailSchema), verifyEmail);
-authRouter.post('/refresh-token', refreshToken);
+authRouter.post('/register', validate(registerSchema), register);
+authRouter.post('/login', validate(loginSchema), login);
+authRouter.post('/forgot-password', validate(forgotPasswordSchema), forgotPassword);
+authRouter.post('/reset-password/:token', validate(resetPasswordSchema), resetPassword);
 
 // Protected routes
-authRouter.post('/signup/staff', 
-  authenticateUser,
-  requireRole(['admin']),
-  validateRequest(signUpSchema),
-  signupStaff
+authRouter.post('/change-password',
+  protect,
+  validate(changePasswordSchema),
+  updatePassword
 );
 
 export default authRouter;
