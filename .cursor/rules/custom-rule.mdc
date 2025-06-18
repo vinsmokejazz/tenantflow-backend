@@ -3,221 +3,91 @@ description:
 globs: 
 alwaysApply: true
 ---
+rules:
+  - id: remove-jwt-secret-from-config
+    description: Remove JWT_SECRET from required env config
+    target: "src/config/config.ts"
+    find: |
+      JWT_SECRET: z.string(),
+    replace: ""
 
-#  Secure All Routes with Authentication Middleware
-> Wrap all protected route handlers (GET, POST, PUT, DELETE) with `authMiddleware`.  
-> Do not apply to `/authRoute.ts`.
+  - id: keep-openai-required
+    description: Keep OPENAI_API_KEY as required (no change)
+    target: "src/config/config.ts"
+    find: |
+      OPENAI_API_KEY: z.string(),
+    replace: |
+      OPENAI_API_KEY: z.string(),
 
-Update all route handlers from:
-```ts
-router.get("/", controller.getHandler);
-```
+  - id: remove-jwt-secret-from-env-example
+    description: Remove JWT_SECRET from .env.example
+    target: ".env.example"
+    find: |
+      JWT_SECRET=.*\n?
+    replace: ""
 
-To:
-```ts
-router.get("/", authMiddleware, controller.getHandler);
-```
+  - id: delete-local-jwt-utils
+    description: Delete jwt.ts utility file (not needed with Supabase)
+    target: "src/utils/jwt.ts"
+    action: delete
 
----
+  - id: remove-jwt-imports
+    description: Remove jsonwebtoken import in all controllers
+    target: "src/controllers/**/*.ts"
+    find: |
+      import jwt from "jsonwebtoken";
+    replace: ""
 
-#  Add Role-Based Access Control (RBAC) Middleware
-> Create middleware functions `requireAdmin` and `requireStaff` in `middleware/authRoles.ts`.
+  - id: uninstall-jsonwebtoken-package
+    description: Remove jsonwebtoken from dependencies
+    target: "package.json"
+    find: |
+      "jsonwebtoken": "[^"]+",\n?
+    replace: ""
 
-Create a new file `src/middleware/authRoles.ts`:
-```ts
-export const requireAdmin = (req, res, next) => {
-  if (req.user?.role !== "admin") {
-    return res.status(403).json({ message: "Admins only" });
-  }
-  next();
-};
+  - id: add-supabase-auth-middleware
+    description: Add Supabase auth middleware to src/middleware/authMiddleware.ts
+    target: "src/middleware/authMiddleware.ts"
+    replace: |
+      import { Request, Response, NextFunction } from "express";
+      import { createClient } from "@supabase/supabase-js";
 
-export const requireStaff = (req, res, next) => {
-  if (req.user?.role !== "staff") {
-    return res.status(403).json({ message: "Staff only" });
-  }
-  next();
-};
-```
+      const supabase = createClient(
+        process.env.SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
 
-Use like this in routes:
-```ts
-router.post("/", authMiddleware, requireAdmin, controller.createBusiness);
-```
+      export const protect = async (req: Request, res: Response, next: NextFunction) => {
+        const token = req.headers.authorization?.split("Bearer ")[1];
+        if (!token) return res.status(401).json({ error: "Missing token" });
 
----
+        const { data: { user }, error } = await supabase.auth.getUser(token);
+        if (error || !user) return res.status(401).json({ error: "Invalid token" });
 
-#  Add Centralized Error Handling Middleware
-> Catch all unhandled exceptions in one place.
+        req.user = user;
+        next();
+      };
 
-Create `src/middleware/errorHandler.ts`:
-```ts
-export const errorHandler = (err, req, res, next) => {
-  console.error(err);
-  res.status(500).json({
-    message: "Internal Server Error",
-    error: err.message,
-  });
-};
-```
+  - id: extend-express-request-type
+    description: Add user type extension to Express request
+    target: "src/types/express/index.d.ts"
+    replace: |
+      declare namespace Express {
+        interface Request {
+          user?: any;
+        }
+      }
 
-In `index.ts` (or `app.ts`), import and apply:
-```ts
-import { errorHandler } from "./middleware/errorHandler";
-app.use(errorHandler);
-```
+  - id: apply-auth-middleware-to-business-routes
+    description: Add Supabase protect middleware to business routes
+    target: "src/routes/businessRoute.ts"
+    find: |
+      import { Router } from "express";
+    replace: |
+      import { Router } from "express";
+      import { protect } from "../middleware/authMiddleware";
 
----
-
-#  Convert Prisma Client to Singleton Pattern
-> Prevent multiple database connections from crashing the app.
-
-Create `src/lib/prisma.ts`:
-```ts
-import { PrismaClient } from "@prisma/client";
-
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
-
-export const prisma =
-  globalForPrisma.prisma ||
-  new PrismaClient({
-    log: ["query", "info", "warn", "error"],
-  });
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
-```
-
-Update all files using `new PrismaClient()` to instead:
-```ts
-import { prisma } from "../lib/prisma";
-```
-
----
-
-#  Enforce Zod Validation on All Routes
-> Ensure every POST/PUT route uses proper Zod schema and middleware.
-
-Create a validation middleware `src/middleware/validate.ts`:
-```ts
-export const validate = (schema) => (req, res, next) => {
-  try {
-    req.body = schema.parse(req.body);
-    next();
-  } catch (err) {
-    return res.status(400).json({ message: err.errors });
-  }
-};
-```
-
-Example usage in route:
-```ts
-import { validate } from "../middleware/validate";
-import { createClientSchema } from "../validations/clientValidation";
-
-router.post("/", authMiddleware, validate(createClientSchema), clientController.createClient);
-```
-
-Example Zod schema:
-```ts
-import { z } from "zod";
-
-export const createClientSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
-  phone: z.string().optional(),
-});
-```
-
----
-
-# 🧠 Implement Service Logic Placeholders
-> Add real Prisma DB logic to empty service files.
-
-Example for `leadService.ts`:
-```ts
-import { prisma } from "../lib/prisma";
-
-export const createLead = async (data) => {
-  return await prisma.lead.create({ data });
-};
-
-export const getAllLeads = async () => {
-  return await prisma.lead.findMany();
-};
-```
-
-Repeat for:
-- `followUpService.ts`
-- `businessService.ts`
-
-Use similar logic from `clientService.ts`.
-
----
-
-# 🧪 Add Basic Jest Test Setup
-> Add unit test coverage starting with `/auth`.
-
-1. Create `tests/auth.test.ts`:
-```ts
-import request from "supertest";
-import app from "../src/index";
-
-describe("POST /auth/login", () => {
-  it("should return 200 with valid credentials", async () => {
-    const res = await request(app).post("/auth/login").send({
-      email: "test@example.com",
-      password: "password123"
-    });
-    expect(res.statusCode).toBe(200);
-  });
-});
-```
-
-2. Ensure `jest` is configured in `package.json`:
-```json
-"scripts": {
-  "test": "jest"
-}
-```
-
-3. Run: `npm run test`
-
----
-
-#  Remove Debug Logs
-> Remove all `console.log` statements left during development.
-
-Search and remove lines like:
-```ts
-console.log("Debug: schema", schema);
-```
-
-Also delete commented-out or dead code blocks.
-
----
-
-#  Bonus: Add Test Folder and Config
-> Scaffold a clean test environment.
-
-If not present, create:
-```
-/tests/
-  auth.test.ts
-  client.test.ts
-/jest.config.js
-```
-
-Example `jest.config.js`:
-```js
-module.exports = {
-  testEnvironment: "node",
-  transform: {
-    "^.+\.ts$": "ts-jest",
-  },
-  moduleFileExtensions: ["ts", "js", "json"],
-};
-```
-
----
+    after: |
+      const router = Router();
+    insert: |
+      router.use(protect);

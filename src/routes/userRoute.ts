@@ -7,10 +7,15 @@ import { userValidation } from '../validations/user.validation';
 import { AppError } from '../utils/error';
 import { prisma } from '../config/prisma';
 import { Prisma } from '@prisma/client';
-import { JwtPayload } from '../utils/jwt';
 
 interface AuthenticatedRequest extends Request {
-  user?: JwtPayload;
+  user?: {
+    id: string;
+    email: string;
+    name: string;
+    role: string;
+    businessId: string;
+  };
 }
 
 const userRouter = express.Router();

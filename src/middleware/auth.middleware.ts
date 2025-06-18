@@ -1,20 +1,35 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
 import { AppError } from '../utils/error';
 import { logger } from '../utils/logger';
 import { prisma } from '../config/prisma';
+import { createClient } from '@supabase/supabase-js';
+import { config } from '../config/config';
 import { Prisma } from '@prisma/client';
-import { JwtPayload } from '../utils/jwt';
+
+// Initialize Supabase client
+const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY);
 
 // Define AuthRequest interface
 interface AuthRequest extends Request {
-  user?: JwtPayload;
+  user?: {
+    id: string;
+    email: string;
+    name: string;
+    role: string;
+    businessId: string;
+  };
 }
 
 declare global {
   namespace Express {
     interface Request {
-      user?: JwtPayload;
+      user?: {
+        id: string;
+        email: string;
+        name: string;
+        role: string;
+        businessId: string;
+      };
     }
   }
 }
@@ -33,15 +48,16 @@ export const authenticate = async (
 
     const token = authHeader.split(' ')[1];
 
-    if (!process.env.JWT_SECRET) {
-      throw AppError.InternalError('JWT secret is not configured');
+    // Verify token with Supabase
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+
+    if (error || !user) {
+      throw AppError.AuthenticationError('Invalid token');
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET) as JwtPayload;
-
-    // Verify user still exists
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
+    // Verify user still exists in our database
+    const dbUser = await prisma.user.findUnique({
+      where: { supabase_id: user.id },
       select: {
         id: true,
         email: true,
@@ -51,36 +67,28 @@ export const authenticate = async (
       }
     });
 
-    if (!user) {
+    if (!dbUser) {
       throw AppError.AuthenticationError('User no longer exists');
     }
 
     // Attach user to request
     req.user = {
-      id: user.id,
-      email: user.email,
-      name: user.name || '',
-      role: user.role,
-      businessId: user.businessId
+      id: dbUser.id,
+      email: dbUser.email,
+      name: dbUser.name,
+      role: dbUser.role,
+      businessId: dbUser.businessId
     };
 
     logger.info('User authenticated:', {
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-      businessId: user.businessId
+      userId: dbUser.id,
+      email: dbUser.email,
+      role: dbUser.role,
+      businessId: dbUser.businessId
     });
 
     next();
   } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError) {
-      next(AppError.AuthenticationError('Invalid token'));
-      return;
-    }
-    if (error instanceof jwt.TokenExpiredError) {
-      next(AppError.AuthenticationError('Token expired'));
-      return;
-    }
     next(error);
   }
 };

@@ -1,236 +1,198 @@
 import { Request, Response, NextFunction } from "express";
 import { supabaseAdmin } from "../config/supabase";
-import jwt from 'jsonwebtoken';
 import { AppError } from '../utils/error';
 import { prisma } from '../lib/prisma';
 import { createClient } from '@supabase/supabase-js';
-import { signToken, JwtPayload } from '../utils/jwt';
+import { config } from '../config/config';
+import { logger } from '../utils/logger';
 
 const FREE_TIER_CLIENT_LIMIT = 10;
 
 interface AuthRequest extends Request {
-  user?: JwtPayload;
+  user?: {
+    id: string;
+    email: string;
+    name: string;
+    role: string;
+    businessId: string;
+  };
 }
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_ANON_KEY!
-);
+// Initialize Supabase client
+const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY);
 
-export const register = async (req: Request, res: Response) => {
+export const register = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, password, name, business_name, role } = req.body;
+    const { email, password, name, businessName } = req.body;
 
-    // Create user in Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signUp({
+    // Create user in Supabase
+    const { data: { user }, error: supabaseError } = await supabase.auth.signUp({
       email,
       password,
     });
 
-    if (authError) throw new AppError(400, authError.message);
+    if (supabaseError || !user) {
+      throw AppError.ValidationError(supabaseError?.message || 'Failed to create user');
+    }
 
-    // Create business with user
+    // Create business
     const business = await prisma.business.create({
       data: {
-        name: business_name,
-        users: {
-          create: {
-            supabase_id: authData.user!.id,
-            email,
-            name: name || '',
-            role: role || 'admin',
-            password: '', // Password is managed by Supabase
-          }
-        }
+        name: businessName,
       },
-      include: {
-        users: true
-      }
     });
 
-    const user = business.users[0];
-    if (!user) throw new AppError(500, 'User creation failed');
-
-    // Generate JWT token
-    const token = signToken({
-      id: user.id,
-      email: user.email || '',
-      name: user.name || '',
-      role: user.role || 'admin',
-      businessId: user.businessId || ''
+    // Create user in our database
+    const dbUser = await prisma.user.create({
+      data: {
+        email,
+        name,
+        role: 'admin',
+        supabase_id: user.id,
+        businessId: business.id,
+      },
     });
 
-    // Remove sensitive data
-    const userWithoutSensitive = user ? { ...user } : {};
-    if ('password' in userWithoutSensitive) delete userWithoutSensitive.password;
+    logger.info('User registered:', {
+      userId: dbUser.id,
+      email: dbUser.email,
+      businessId: business.id,
+    });
 
     res.status(201).json({
-      status: 'success',
-      token,
-      data: {
-        user: userWithoutSensitive,
-        business
-      }
+      message: 'Registration successful',
+      user: {
+        id: dbUser.id,
+        email: dbUser.email,
+        name: dbUser.name,
+        role: dbUser.role,
+        businessId: business.id,
+      },
     });
   } catch (error) {
-    if (error instanceof AppError) {
-      res.status(error.statusCode).json({
-        status: 'error',
-        message: error.message
-      });
-    } else {
-      res.status(500).json({
-        status: 'error',
-        message: 'Internal server error'
-      });
-    }
+    next(error);
   }
 };
 
-export const login = async (req: Request, res: Response) => {
+export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password } = req.body;
 
     // Authenticate with Supabase
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    const { data: { session }, error: supabaseError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    if (authError) throw new AppError(401, 'Invalid email or password');
+    if (supabaseError || !session) {
+      throw AppError.AuthenticationError(supabaseError?.message || 'Invalid credentials');
+    }
 
-    // Get user from database
+    // Get user from our database
     const user = await prisma.user.findUnique({
-      where: { supabase_id: authData.user!.id }
+      where: { supabase_id: session.user.id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        businessId: true,
+      },
     });
 
-    if (!user) throw new AppError(404, 'User not found');
+    if (!user) {
+      throw AppError.AuthenticationError('User not found');
+    }
 
-    // Generate JWT token
-    const token = signToken({
-      id: user.id,
-      email: user.email || '',
-      name: user.name || '',
-      role: user.role || 'admin',
-      businessId: user.businessId || ''
+    logger.info('User logged in:', {
+      userId: user.id,
+      email: user.email,
     });
 
-    // Remove sensitive data
-    const userWithoutSensitive = user ? { ...user } : {};
-    if ('password' in userWithoutSensitive) delete userWithoutSensitive.password;
-
-    res.status(200).json({
-      status: 'success',
-      token,
-      data: {
-        user: userWithoutSensitive
-      }
+    res.json({
+      message: 'Login successful',
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        businessId: user.businessId,
+      },
+      session: {
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      },
     });
   } catch (error) {
-    if (error instanceof AppError) {
-      res.status(error.statusCode).json({
-        status: 'error',
-        message: error.message
-      });
-    } else {
-      res.status(500).json({
-        status: 'error',
-        message: 'Internal server error'
-      });
-    }
+    next(error);
   }
 };
 
-export const forgotPassword = async (req: Request, res: Response) => {
+export const forgotPassword = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email } = req.body;
 
-    // Send password reset email through Supabase
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.FRONTEND_URL}/reset-password`,
+      redirectTo: `${config.CORS_ORIGIN}/reset-password`,
     });
 
-    if (error) throw new AppError(400, error.message);
-
-    res.status(200).json({
-      status: 'success',
-      message: 'Password reset email sent'
-    });
-  } catch (error) {
-    if (error instanceof AppError) {
-      res.status(error.statusCode).json({
-        status: 'error',
-        message: error.message
-      });
-    } else {
-      res.status(500).json({
-        status: 'error',
-        message: 'Internal server error'
-      });
+    if (error) {
+      throw AppError.ValidationError(error.message);
     }
+
+    res.json({ message: 'Password reset email sent' });
+  } catch (error) {
+    next(error);
   }
 };
 
-export const resetPassword = async (req: Request, res: Response) => {
+export const resetPassword = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { password } = req.body;
 
-    // Reset password through Supabase
     const { error } = await supabase.auth.updateUser({
-      password: password
+      password,
     });
 
-    if (error) throw new AppError(400, error.message);
-
-    res.status(200).json({
-      status: 'success',
-      message: 'Password reset successful'
-    });
-  } catch (error) {
-    if (error instanceof AppError) {
-      res.status(error.statusCode).json({
-        status: 'error',
-        message: error.message
-      });
-    } else {
-      res.status(500).json({
-        status: 'error',
-        message: 'Internal server error'
-      });
+    if (error) {
+      throw AppError.ValidationError(error.message);
     }
+
+    res.json({ message: 'Password reset successful' });
+  } catch (error) {
+    next(error);
   }
 };
 
-export const updatePassword = async (req: AuthRequest, res: Response) => {
+export const updatePassword = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { newPassword } = req.body;
     const userId = req.user?.id;
 
-    if (!userId) throw new AppError(401, 'User not authenticated');
-
-    // Update password through Supabase
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword
-    });
-
-    if (error) throw new AppError(400, error.message);
-
-    res.status(200).json({
-      status: 'success',
-      message: 'Password updated successfully'
-    });
-  } catch (error) {
-    if (error instanceof AppError) {
-      res.status(error.statusCode).json({
-        status: 'error',
-        message: error.message
-      });
-    } else {
-      res.status(500).json({
-        status: 'error',
-        message: 'Internal server error'
-      });
+    if (!userId) {
+      throw AppError.AuthenticationError('User not authenticated');
     }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw AppError.NotFoundError('User not found');
+    }
+
+    // Update password in Supabase
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (error) {
+      throw AppError.ValidationError(error.message);
+    }
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    next(error);
   }
 };
 
@@ -262,20 +224,18 @@ export const signUpBusiness = async (req: Request, res: Response, next: NextFunc
       await prisma.business.delete({
         where: { id: business.id }
       });
-      res.status(400).json({ error: error.message });
-      return;
+      throw AppError.ValidationError(error.message);
     }
 
     if (!data.user?.email) {
-      throw new Error('User email is required');
+      throw AppError.ValidationError('User email is required');
     }
 
     const defaultName = email.split('@')[0];
 
     // Create user in our database
-    await prisma.user.create({
+    const dbUser = await prisma.user.create({
       data: {
-        id: data.user.id,
         email,
         role: "admin",
         businessId: business.id,
@@ -284,21 +244,18 @@ export const signUpBusiness = async (req: Request, res: Response, next: NextFunc
       },
     });
 
-    // Generate tokens
-    const token = signToken({
-      id: data.user.id,
-      email: data.user.email,
-      name: defaultName,
-      role: "admin", // Use the role we set in user_metadata
-      businessId: business.id, // Use the business ID we just created
-    });
-
     res.status(201).json({
       message: "Business and admin user created successfully",
       businessId: business.id,
-      token
+      user: {
+        id: dbUser.id,
+        email: dbUser.email,
+        name: dbUser.name,
+        role: dbUser.role,
+        businessId: business.id,
+      }
     });
-  } catch (error: any) {
+  } catch (error) {
     next(error);
   }
 };
@@ -307,33 +264,23 @@ export const signIn = async (req: Request, res: Response, next: NextFunction): P
   const { email, password } = req.body;
 
   try {
-    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+    const { data: { session }, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    if (error) {
-      res.status(401).json({ error: "Invalid credentials" });
-      return;
+    if (error || !session) {
+      throw AppError.AuthenticationError(error?.message || 'Invalid credentials');
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: data.user.id },
+      where: { supabase_id: session.user.id },
       include: { business: true }
     });
 
     if (!user) {
-      res.status(404).json({ error: "User not found" });
-      return;
+      throw AppError.NotFoundError('User not found');
     }
-
-    const token = signToken({
-      id: user.id,
-      email: user.email,
-      name: user.name || '',
-      role: user.role,
-      businessId: user.businessId,
-    });
 
     res.json({
       user: {
@@ -344,9 +291,12 @@ export const signIn = async (req: Request, res: Response, next: NextFunction): P
         businessId: user.businessId,
         businessName: user.business?.name || null
       },
-      token
+      session: {
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      }
     });
-  } catch (error: any) {
+  } catch (error) {
     next(error);
   }
 };
@@ -361,41 +311,37 @@ export const verifyEmail = async (req: Request, res: Response, next: NextFunctio
     });
 
     if (error) {
-      res.status(400).json({ error: error.message });
-      return;
+      throw AppError.ValidationError(error.message);
     }
 
     res.json({ message: "Email verified successfully" });
-  } catch (error: any) {
+  } catch (error) {
     next(error);
   }
 };
 
-export const refreshToken = async (req: Request, res: Response): Promise<void> => {
-  const { refreshToken } = req.body;
-  if (!refreshToken) {
-    res.status(401).json({ error: "Refresh token required" });
-    return;
+export const refreshToken = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const { refresh_token } = req.body;
+  
+  if (!refresh_token) {
+    throw AppError.AuthenticationError('Refresh token required');
   }
+
   try {
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!) as {
-      email: string;
-      name: string;
-      role: string;
-      businessId: string; userId: string 
-};
-    const tokens = signToken({
-      id: decoded.userId,
-      email: decoded.email,
-      name: decoded.name,
-      role: decoded.role,
-      businessId: decoded.businessId,
+    const { data: { session }, error } = await supabase.auth.refreshSession({
+      refresh_token
     });
-    res.json(tokens);
-    return;
+
+    if (error || !session) {
+      throw AppError.AuthenticationError(error?.message || 'Invalid refresh token');
+    }
+
+    res.json({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token
+    });
   } catch (error) {
-    res.status(401).json({ error: "Invalid refresh token" });
-    return;
+    next(error);
   }
 };
 
@@ -404,8 +350,7 @@ export const signupStaff = async (req: AuthRequest, res: Response, next: NextFun
   const businessId = req.user?.businessId;
 
   if (!businessId) {
-    res.status(403).json({ error: "Not authorized to create users" });
-    return;
+    throw AppError.AuthorizationError('Not authorized to create users');
   }
 
   try {
@@ -420,21 +365,17 @@ export const signupStaff = async (req: AuthRequest, res: Response, next: NextFun
     });
 
     if (error) {
-      res.status(400).json({
-        error: error.message
-      });
-      return;
+      throw AppError.ValidationError(error.message);
     }
 
     if (!data.user?.email) {
-      throw new Error('User email is required');
+      throw AppError.ValidationError('User email is required');
     }
 
     const defaultName = email.split('@')[0];
 
-    await prisma.user.create({
+    const dbUser = await prisma.user.create({
       data: {
-        id: data.user.id,
         email: data.user.email,
         role: "staff",
         businessId,
@@ -443,8 +384,17 @@ export const signupStaff = async (req: AuthRequest, res: Response, next: NextFun
       }
     });
 
-    res.status(201).json({ message: "Staff user created successfully" });
-  } catch (error: any) {
+    res.status(201).json({
+      message: "Staff user created successfully",
+      user: {
+        id: dbUser.id,
+        email: dbUser.email,
+        name: dbUser.name,
+        role: dbUser.role,
+        businessId: dbUser.businessId
+      }
+    });
+  } catch (error) {
     next(error);
   }
 };
