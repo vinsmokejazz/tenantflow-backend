@@ -1,7 +1,13 @@
 import { Request, Response } from 'express';
-import { AnalyticsModel } from '../models/analytics.model';
-import { AppError } from '../middleware/errorHandler';
+import { AnalyticsModel, AnalyticsData, Metrics } from '../models/analytics.model';
+import { AppError } from '../utils/error';
 import { AIAnalyticsService } from '../services/aiAnalytics.service';
+import { logger } from '../utils/logger';
+
+interface DateRange {
+  start: Date;
+  end: Date;
+}
 
 export class AnalyticsController {
   private analyticsModel: AnalyticsModel;
@@ -12,14 +18,46 @@ export class AnalyticsController {
     this.aiService = new AIAnalyticsService();
   }
 
-  // Get dashboard metrics
-  async getDashboardMetrics(req: Request, res: Response) {
+  private validateDateRange(startDate?: string, endDate?: string): DateRange {
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const end = endDate ? new Date(endDate) : new Date();
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      throw new AppError(400, 'Invalid date format');
+    }
+
+    if (start > end) {
+      throw new AppError(400, 'Start date must be before end date');
+    }
+
+    return { start, end };
+  }
+
+  private getDateRange(period: string): Date {
+    const now = new Date();
+    switch (period) {
+      case 'week':
+        return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      case 'month':
+        return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      case 'quarter':
+        return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      case 'year':
+        return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+      default:
+        throw new AppError(400, 'Invalid period specified');
+    }
+  }
+
+  async getDashboardMetrics(req: Request, res: Response): Promise<void> {
     try {
       const { businessId } = req.params;
       const { startDate, endDate } = req.query;
 
-      const start = startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      const end = endDate ? new Date(endDate as string) : new Date();
+      const { start, end } = this.validateDateRange(
+        startDate as string | undefined,
+        endDate as string | undefined
+      );
 
       // Get aggregated metrics
       const metrics = await this.analyticsModel.getAggregatedMetrics(businessId, start, end);
@@ -35,12 +73,15 @@ export class AnalyticsController {
         }
       });
     } catch (error) {
+      logger.error('Error in getDashboardMetrics:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw new AppError(500, 'Error fetching dashboard metrics');
     }
   }
 
-  // Get sales pipeline analytics
-  async getSalesPipeline(req: Request, res: Response) {
+  async getSalesPipeline(req: Request, res: Response): Promise<void> {
     try {
       const { businessId } = req.params;
       const { period } = req.query;
@@ -49,8 +90,6 @@ export class AnalyticsController {
       const end = new Date();
 
       const metrics = await this.analyticsModel.findByBusinessId(businessId, start, end);
-      
-      // Process sales pipeline data
       const pipelineData = this.processPipelineData(metrics);
 
       res.status(200).json({
@@ -58,12 +97,15 @@ export class AnalyticsController {
         data: pipelineData
       });
     } catch (error) {
+      logger.error('Error in getSalesPipeline:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw new AppError(500, 'Error fetching sales pipeline data');
     }
   }
 
-  // Get lead conversion analytics
-  async getLeadConversion(req: Request, res: Response) {
+  async getLeadConversion(req: Request, res: Response): Promise<void> {
     try {
       const { businessId } = req.params;
       const { period } = req.query;
@@ -72,8 +114,6 @@ export class AnalyticsController {
       const end = new Date();
 
       const metrics = await this.analyticsModel.findByBusinessId(businessId, start, end);
-      
-      // Process conversion data
       const conversionData = this.processConversionData(metrics);
 
       res.status(200).json({
@@ -81,12 +121,15 @@ export class AnalyticsController {
         data: conversionData
       });
     } catch (error) {
+      logger.error('Error in getLeadConversion:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw new AppError(500, 'Error fetching lead conversion data');
     }
   }
 
-  // Get AI-powered predictions
-  async getPredictions(req: Request, res: Response) {
+  async getPredictions(req: Request, res: Response): Promise<void> {
     try {
       const { businessId } = req.params;
       const start = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
@@ -100,11 +143,15 @@ export class AnalyticsController {
         data: predictions
       });
     } catch (error) {
+      logger.error('Error in getPredictions:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw new AppError(500, 'Error generating predictions');
     }
   }
 
-  private processPipelineData(metrics: any[]) {
+  private processPipelineData(metrics: AnalyticsData[]): Array<{ stage: string; count: number; value: number }> {
     const pipelineData = new Map<string, { count: number; value: number }>();
 
     metrics.forEach(metric => {
@@ -125,33 +172,12 @@ export class AnalyticsController {
     }));
   }
 
-  private processConversionData(metrics: any[]) {
+  private processConversionData(metrics: AnalyticsData[]): { totalLeads: number; convertedLeads: number; conversionRate: number } {
     return metrics.reduce((acc, metric) => {
       acc.totalLeads += metric.metrics.total_leads;
       acc.convertedLeads += metric.metrics.converted_leads;
       acc.conversionRate = (acc.convertedLeads / acc.totalLeads) * 100;
       return acc;
     }, { totalLeads: 0, convertedLeads: 0, conversionRate: 0 });
-  }
-
-  private getDateRange(period: string): Date {
-    const now = new Date();
-    switch (period) {
-      case 'week':
-        now.setDate(now.getDate() - 7);
-        return now;
-      case 'month':
-        now.setMonth(now.getMonth() - 1);
-        return now;
-      case 'quarter':
-        now.setMonth(now.getMonth() - 3);
-        return now;
-      case 'year':
-        now.setFullYear(now.getFullYear() - 1);
-        return now;
-      default:
-        now.setMonth(now.getMonth() - 1);
-        return now;
-    }
   }
 } 

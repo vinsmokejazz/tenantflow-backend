@@ -1,7 +1,9 @@
 import { OpenAI } from 'openai';
-import { AnalyticsModel } from '../models/analytics.model';
+import { AnalyticsModel, Metrics, AIInsights } from '../models/analytics.model';
+import { AppError } from '../utils/error';
+import { logger } from '../utils/logger';
 
-interface AIInsights {
+interface AIResponse {
   predicted_revenue: number;
   lead_scoring: Record<string, number>;
   churn_risk: Record<string, number>;
@@ -9,18 +11,37 @@ interface AIInsights {
   sentiment_analysis: Record<string, number>;
 }
 
+interface PredictionResponse {
+  revenuePredictions: Array<{ date: string; value: number }>;
+  conversionPredictions: Array<{ leadId: string; score: number }>;
+  costPredictions: Array<{ date: string; value: number }>;
+  valuePredictions: Array<{ customerId: string; risk: number }>;
+  recommendations: string[];
+  sentiment: Record<string, number>;
+}
+
+interface AnalyticsDataPoint {
+  businessId: string;
+  metrics: Metrics;
+  date: Date;
+}
+
 export class AIAnalyticsService {
   private openai: OpenAI;
   private analyticsModel: AnalyticsModel;
 
   constructor() {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new AppError(500, 'OpenAI API key is not configured');
+    }
+
     this.openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
     this.analyticsModel = new AnalyticsModel();
   }
 
-  async generateInsights(metrics: any) {
+  async generateInsights(metrics: Metrics & { businessId: string }): Promise<AIInsights> {
     try {
       // Prepare data for AI analysis
       const dataForAnalysis = this.prepareDataForAnalysis(metrics);
@@ -54,13 +75,20 @@ export class AIAnalyticsService {
 
       return insights;
     } catch (error) {
-      console.error('Error generating AI insights:', error);
-      throw error;
+      logger.error('Error generating AI insights:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
+      throw new AppError(500, 'Error generating AI insights');
     }
   }
 
-  async generatePredictions(historicalData: any[]) {
+  async generatePredictions(historicalData: AnalyticsDataPoint[]): Promise<PredictionResponse> {
     try {
+      if (historicalData.length === 0) {
+        throw new AppError(400, 'No historical data available for predictions');
+      }
+
       // Prepare historical data for prediction
       const preparedData = this.prepareDataForPrediction(historicalData);
 
@@ -85,36 +113,37 @@ export class AIAnalyticsService {
       const predictions = this.parsePredictionResponse(response.choices[0].message.content || '');
 
       // Store predictions in database
-      if (historicalData.length > 0) {
-        const insights: AIInsights = {
-          predicted_revenue: predictions.revenuePredictions[0]?.value || 0,
-          lead_scoring: predictions.conversionPredictions.reduce((acc: Record<string, number>, pred: any) => {
-            acc[pred.leadId] = pred.score;
-            return acc;
-          }, {}),
-          churn_risk: predictions.valuePredictions.reduce((acc: Record<string, number>, pred: any) => {
-            acc[pred.customerId] = pred.risk;
-            return acc;
-          }, {}),
-          next_best_actions: predictions.recommendations || [],
-          sentiment_analysis: predictions.sentiment || {}
-        };
+      const insights: AIInsights = {
+        predicted_revenue: predictions.revenuePredictions[0]?.value || 0,
+        lead_scoring: predictions.conversionPredictions.reduce((acc: Record<string, number>, pred) => {
+          acc[pred.leadId] = pred.score;
+          return acc;
+        }, {}),
+        churn_risk: predictions.valuePredictions.reduce((acc: Record<string, number>, pred) => {
+          acc[pred.customerId] = pred.risk;
+          return acc;
+        }, {}),
+        next_best_actions: predictions.recommendations,
+        sentiment_analysis: predictions.sentiment
+      };
 
-        await this.analyticsModel.updateAiInsights(
-          historicalData[0].businessId,
-          new Date(),
-          insights
-        );
-      }
+      await this.analyticsModel.updateAiInsights(
+        historicalData[0].businessId,
+        new Date(),
+        insights
+      );
 
       return predictions;
     } catch (error) {
-      console.error('Error generating predictions:', error);
-      throw error;
+      logger.error('Error generating predictions:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
+      throw new AppError(500, 'Error generating predictions');
     }
   }
 
-  private prepareDataForAnalysis(metrics: any) {
+  private prepareDataForAnalysis(metrics: Metrics): Record<string, any> {
     return {
       metrics: {
         total_leads: metrics.total_leads,
@@ -129,14 +158,14 @@ export class AIAnalyticsService {
     };
   }
 
-  private prepareDataForPrediction(historicalData: any[]) {
+  private prepareDataForPrediction(historicalData: AnalyticsDataPoint[]): Array<{ date: string; metrics: Metrics }> {
     return historicalData.map(data => ({
-      date: data.date,
+      date: data.date.toISOString(),
       metrics: data.metrics
     }));
   }
 
-  private createInsightPrompt(data: any) {
+  private createInsightPrompt(data: Record<string, any>): string {
     return `Analyze the following CRM metrics and provide insights:
     ${JSON.stringify(data, null, 2)}
     
@@ -147,7 +176,7 @@ export class AIAnalyticsService {
     4. Recommended actions`;
   }
 
-  private createPredictionPrompt(data: any) {
+  private createPredictionPrompt(data: Array<{ date: string; metrics: Metrics }>): string {
     return `Based on the following historical CRM data, predict future trends:
     ${JSON.stringify(data, null, 2)}
     
@@ -160,7 +189,7 @@ export class AIAnalyticsService {
 
   private parseAIResponse(response: string): AIInsights {
     try {
-      const parsed = JSON.parse(response);
+      const parsed = JSON.parse(response) as AIResponse;
       return {
         predicted_revenue: parsed.predicted_revenue || 0,
         lead_scoring: parsed.lead_scoring || {},
@@ -169,20 +198,14 @@ export class AIAnalyticsService {
         sentiment_analysis: parsed.sentiment_analysis || {}
       };
     } catch (error) {
-      console.error('Error parsing AI response:', error);
-      return {
-        predicted_revenue: 0,
-        lead_scoring: {},
-        churn_risk: {},
-        next_best_actions: [],
-        sentiment_analysis: {}
-      };
+      logger.error('Error parsing AI response:', error);
+      throw new AppError(500, 'Failed to parse AI response');
     }
   }
 
-  private parsePredictionResponse(response: string) {
+  private parsePredictionResponse(response: string): PredictionResponse {
     try {
-      const parsed = JSON.parse(response);
+      const parsed = JSON.parse(response) as PredictionResponse;
       return {
         revenuePredictions: parsed.revenuePredictions || [],
         conversionPredictions: parsed.conversionPredictions || [],
@@ -192,15 +215,8 @@ export class AIAnalyticsService {
         sentiment: parsed.sentiment || {}
       };
     } catch (error) {
-      console.error('Error parsing prediction response:', error);
-      return {
-        revenuePredictions: [],
-        conversionPredictions: [],
-        costPredictions: [],
-        valuePredictions: [],
-        recommendations: [],
-        sentiment: {}
-      };
+      logger.error('Error parsing prediction response:', error);
+      throw new AppError(500, 'Failed to parse prediction response');
     }
   }
 } 

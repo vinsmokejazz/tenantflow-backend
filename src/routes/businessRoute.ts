@@ -1,13 +1,19 @@
 import express, { Request, Response, NextFunction, RequestHandler } from 'express';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
-import { authenticateUser } from '../middleware/authMiddleware';
+import { authenticate } from '../middleware/auth.middleware';
+import { requireAdmin } from '../middleware/authRoles';
+import { validateRequest } from '../middleware/validationMiddleware';
+import { businessValidation } from '../validations/business.validation';
+import { AppError } from '../utils/error';
 
 const businessRouter = express.Router();
 const prisma = new PrismaClient();
 
 businessRouter.use(cors());
-businessRouter.use(authenticateUser as RequestHandler);
+
+// Apply authentication to all routes
+businessRouter.use(authenticate);
 
 businessRouter.get('/', (async (req: Request, res: Response, next: NextFunction) => {
   const businessId = req.user?.business_id;
@@ -29,12 +35,13 @@ businessRouter.get('/', (async (req: Request, res: Response, next: NextFunction)
   }
 }) as RequestHandler);
 
-businessRouter.get('/:id', (async (req: Request, res: Response, next: NextFunction) => {
+// GET business by ID
+businessRouter.get('/:id', validateRequest(businessValidation.getBusiness), async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
-  const businessId = req.user?.business_id;
+  const businessId = req.user?.businessId;
 
   if (id !== businessId) {
-    res.status(403).json({ error: 'Not authorized to access this business' });
+    next(AppError.AuthorizationError('Not authorized to access this business'));
     return;
   }
 
@@ -44,23 +51,23 @@ businessRouter.get('/:id', (async (req: Request, res: Response, next: NextFuncti
     });
     
     if (!business) {
-      res.status(404).json({ error: 'Business not found' });
+      next(AppError.NotFoundError('Business not found'));
       return;
     }
     
     res.json(business);
-    return;
-  } catch (error: any) {
-    next(error); return;
+  } catch (error) {
+    next(error);
   }
-}) as RequestHandler);
+});
 
-businessRouter.post('/', (async (req: Request, res: Response, next: NextFunction) => {
+// POST create business - admin only
+businessRouter.post('/', requireAdmin, validateRequest(businessValidation.createBusiness), async (req: Request, res: Response, next: NextFunction) => {
   const { name, subscription } = req.body;
-  const businessId = req.user?.business_id;
+  const businessId = req.user?.businessId;
 
   if (!businessId) {
-    res.status(403).json({ error: "Unauthorized: missing business ID" });
+    next(AppError.AuthorizationError('Unauthorized: missing business ID'));
     return;
   }
 
@@ -73,20 +80,19 @@ businessRouter.post('/', (async (req: Request, res: Response, next: NextFunction
       },
     });
     res.status(201).json(business);
-    return;
-  } catch (error: any) {
-    next(error); return;
+  } catch (error) {
+    next(error);
   }
-}) as RequestHandler);
+});
 
-//PUT update business
-businessRouter.put('/:id', (async (req: Request, res: Response, next: NextFunction) => {
+// PUT update business - admin only
+businessRouter.put('/:id', requireAdmin, validateRequest(businessValidation.updateBusiness), async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
   const { name, subscription } = req.body;
-  const businessId = req.user?.business_id;
+  const businessId = req.user?.businessId;
 
   if (id !== businessId) {
-    res.status(403).json({ error: 'Not authorized to update this business' });
+    next(AppError.AuthorizationError('Not authorized to update this business'));
     return;
   }
 
@@ -99,18 +105,18 @@ businessRouter.put('/:id', (async (req: Request, res: Response, next: NextFuncti
       }
     });
     res.json(business);
-    return;
-  } catch (error: any) {
-    next(error); return;
+  } catch (error) {
+    next(error);
   }
-}) as RequestHandler);
+});
 
-businessRouter.delete('/:id', (async (req: Request, res: Response, next: NextFunction) => {
+// DELETE business - admin only
+businessRouter.delete('/:id', requireAdmin, validateRequest(businessValidation.deleteBusiness), async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
-  const businessId = req.user?.business_id;
+  const businessId = req.user?.businessId;
 
   if (id !== businessId) {
-    res.status(403).json({ error: 'Not authorized to delete this business' });
+    next(AppError.AuthorizationError('Not authorized to delete this business'));
     return;
   }
 
@@ -119,10 +125,9 @@ businessRouter.delete('/:id', (async (req: Request, res: Response, next: NextFun
       where: { id }
     });
     res.status(204).send();
-    return;
-  } catch (error: any) {
-    next(error); return;
+  } catch (error) {
+    next(error);
   }
-}) as RequestHandler);
+});
 
 export default businessRouter;

@@ -1,32 +1,38 @@
-import express, { Request, Response, NextFunction, RequestHandler } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
-import { authenticateUser } from '../middleware/authMiddleware';
+import { authenticate } from '../middleware/auth.middleware';
+import { requireAdmin } from '../middleware/authRoles';
+import { validateRequest } from '../middleware/validationMiddleware';
+import { leadValidation } from '../validations/lead.validation';
+import { AppError } from '../utils/error';
 
-const LeadRouter = express.Router();
+const leadRouter = express.Router();
 const prisma = new PrismaClient();
 
-LeadRouter.use(cors());
-LeadRouter.use(authenticateUser as RequestHandler);
+leadRouter.use(cors());
+
+// Apply authentication to all routes
+leadRouter.use(authenticate);
 
 // GET all leads
-LeadRouter.get('/', (async (req: Request, res: Response, next: NextFunction) => {
-  const businessId = req.user?.business_id;
+leadRouter.get('/', validateRequest(leadValidation.getLeads), async (req: Request, res: Response, next: NextFunction) => {
+  const businessId = req.user?.businessId;
   
   try {
     const leads = await prisma.lead.findMany({
       where: { businessId }
     });
     res.json(leads);
-    return;
-  } catch (error: any) {
-    next(error); return;
+  } catch (error) {
+    next(error);
   }
-}) as RequestHandler);
+});
 
-LeadRouter.get('/:id', (async (req: Request, res: Response, next: NextFunction) => {
+// GET lead by ID
+leadRouter.get('/:id', validateRequest(leadValidation.getLead), async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
-  const businessId = req.user?.business_id;
+  const businessId = req.user?.businessId;
 
   try {
     const lead = await prisma.lead.findFirst({
@@ -37,24 +43,23 @@ LeadRouter.get('/:id', (async (req: Request, res: Response, next: NextFunction) 
     });
     
     if (!lead) {
-      res.status(404).json({ error: 'Lead not found' });
+      next(AppError.NotFoundError('Lead not found'));
       return;
     }
     
     res.json(lead);
-    return;
-  } catch (error: any) {
-    next(error); return;
+  } catch (error) {
+    next(error);
   }
-}) as RequestHandler);
+});
 
 // POST new lead
-LeadRouter.post('/', (async (req: Request, res: Response, next: NextFunction) => {
+leadRouter.post('/', validateRequest(leadValidation.createLead), async (req: Request, res: Response, next: NextFunction) => {
   const { status, notes, clientId } = req.body;
-  const businessId = req.user?.business_id;
+  const businessId = req.user?.businessId;
 
   if (!businessId) {
-    res.status(403).json({ error: "Unauthorized: missing business ID" });
+    next(AppError.AuthorizationError('Unauthorized: missing business ID'));
     return;
   }
 
@@ -68,38 +73,62 @@ LeadRouter.post('/', (async (req: Request, res: Response, next: NextFunction) =>
       },
     });
     res.status(201).json(lead);
-    return;
-  } catch (error: any) {
-    next(error); return;
+  } catch (error) {
+    next(error);
   }
-}) as RequestHandler);
+});
 
-// PUT update lead
-LeadRouter.put('/:id', (async (req: Request, res: Response, next: NextFunction) => {
+// PUT update lead - admin only
+leadRouter.put('/:id', requireAdmin, validateRequest(leadValidation.updateLead), async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
   const { status, notes } = req.body;
+  const businessId = req.user?.businessId;
+
   try {
-    const lead = await prisma.lead.update({
-      where: { id },
-      data: { status, notes },
+    const lead = await prisma.lead.updateMany({
+      where: { 
+        id,
+        businessId
+      },
+      data: { 
+        status, 
+        notes 
+      }
     });
-    res.json(lead);
-    return;
-  } catch (error: any) {
-    next(error); return;
-  }
-}) as RequestHandler);
 
-// DELETE lead
-LeadRouter.delete('/:id', (async (req: Request, res: Response, next: NextFunction) => {
+    if (lead.count === 0) {
+      next(AppError.NotFoundError('Lead not found or not authorized'));
+      return;
+    }
+
+    res.json({ message: 'Lead updated successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE lead - admin only
+leadRouter.delete('/:id', requireAdmin, validateRequest(leadValidation.deleteLead), async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
-  try {
-    await prisma.lead.delete({ where: { id } });
-    res.status(204).send();
-    return;
-  } catch (error: any) {
-    next(error); return;
-  }
-}) as RequestHandler);
+  const businessId = req.user?.businessId;
 
-export default LeadRouter; 
+  try {
+    const deleted = await prisma.lead.deleteMany({
+      where: { 
+        id,
+        businessId
+      }
+    });
+
+    if (deleted.count === 0) {
+      next(AppError.NotFoundError('Lead not found or not authorized'));
+      return;
+    }
+
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+export default leadRouter; 

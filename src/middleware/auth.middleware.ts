@@ -1,9 +1,20 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyToken } from '../utils/jwt';
+import jwt from 'jsonwebtoken';
 import { AppError } from '../utils/error';
-import { config } from '../config/config';
 import { logger } from '../utils/logger';
+import { prisma } from '../config/prisma';
+import { createClient } from '@supabase/supabase-js';
+import { Prisma } from '@prisma/client';
 
+interface JwtPayload {
+  sub: string;
+  email: string;
+  role: string;
+  businessId: string;
+  exp: number;
+}
+
+// Define AuthRequest interface
 interface AuthRequest extends Request {
   user?: {
     id: string;
@@ -13,41 +24,100 @@ interface AuthRequest extends Request {
   };
 }
 
-export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        id: string;
+        email: string;
+        role: string;
+        businessId: string;
+      };
+    }
+  }
+}
+
+export const authenticate = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
   try {
-    // Get token from header
     const authHeader = req.headers.authorization;
+
     if (!authHeader?.startsWith('Bearer ')) {
-      throw new AppError(401, 'No token provided');
+      throw AppError.AuthenticationError('No token provided');
     }
 
     const token = authHeader.split(' ')[1];
-    if (!token) {
-      throw new AppError(401, 'No token provided');
+
+    if (!process.env.JWT_SECRET) {
+      throw AppError.InternalError('JWT secret is not configured');
     }
 
-    // Verify token
-    const decoded = verifyToken(token);
-    if (!decoded) {
-      throw new AppError(401, 'Invalid token');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET) as JwtPayload;
+
+    // Verify user still exists
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.sub },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        businessId: true
+      }
+    });
+
+    if (!user) {
+      throw AppError.AuthenticationError('User no longer exists');
     }
 
-    // Add user to request
-    req.user = decoded;
+    // Attach user to request
+    req.user = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      businessId: user.businessId
+    };
+
+    logger.info('User authenticated:', {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      businessId: user.businessId
+    });
+
     next();
   } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError) {
+      next(AppError.AuthenticationError('Invalid token'));
+      return;
+    }
+    if (error instanceof jwt.TokenExpiredError) {
+      next(AppError.AuthenticationError('Token expired'));
+      return;
+    }
     next(error);
   }
 };
 
-export const restrictTo = (...roles: string[]) => {
-  return (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authorize = (...roles: string[]) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
-      return next(new AppError(401, 'User not authenticated'));
+      next(AppError.AuthenticationError('Authentication required'));
+      return;
     }
 
     if (!roles.includes(req.user.role)) {
-      return next(new AppError(403, 'You do not have permission to perform this action'));
+      logger.warn('Unauthorized access attempt:', {
+        userId: req.user.id,
+        userRole: req.user.role,
+        requiredRoles: roles,
+        path: req.path,
+        method: req.method
+      });
+      next(AppError.AuthorizationError('Insufficient permissions'));
+      return;
     }
 
     next();
@@ -57,20 +127,43 @@ export const restrictTo = (...roles: string[]) => {
 export const validateBusinessAccess = (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.user) {
-      throw new AppError(401, 'User not authenticated');
+      throw AppError.AuthenticationError('User not authenticated');
     }
 
     const requestedBusinessId = req.params.businessId;
     if (!requestedBusinessId) {
-      throw new AppError(400, 'Business ID is required');
+      throw AppError.ValidationError('Business ID is required');
     }
 
     if (req.user.businessId !== requestedBusinessId) {
-      throw new AppError(403, 'You do not have access to this business');
+      throw AppError.AuthorizationError('You do not have access to this business');
     }
 
     next();
   } catch (error) {
     next(error);
+  }
+};
+
+// Update the analytics tracking to include businessId
+export const trackAnalytics = async (req: AuthRequest, data: Record<string, unknown>) => {
+  try {
+    if (!req.user?.businessId) {
+      throw AppError.ValidationError('Business ID is required for analytics');
+    }
+
+    const analytics = await prisma.analytics.create({
+      data: {
+        businessId: req.user.businessId,
+        date: new Date(),
+        metrics: data as Prisma.InputJsonValue,
+        aiInsights: Prisma.JsonNull
+      }
+    });
+
+    return analytics;
+  } catch (error) {
+    logger.error('Error tracking analytics:', error);
+    throw error;
   }
 }; 
