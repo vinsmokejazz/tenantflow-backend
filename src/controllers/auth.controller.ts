@@ -23,7 +23,7 @@ const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_
 
 export const register = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, password, name, businessName } = req.body;
+    const { email, password, name, business_name } = req.body;
 
     // Create user in Supabase
     const { data: { user }, error: supabaseError } = await supabase.auth.signUp({
@@ -38,7 +38,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     // Create business
     const business = await prisma.business.create({
       data: {
-        name: businessName,
+        name: business_name,
       },
     });
 

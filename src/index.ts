@@ -18,7 +18,7 @@ import leadRouter from './routes/leadRoute';
 import analyticsRouter from './routes/analyticsRoute';
 
 // Create Express app
-const app: Express = express();
+export const app: Express = express();
 
 // Security middleware
 app.use(helmet());
