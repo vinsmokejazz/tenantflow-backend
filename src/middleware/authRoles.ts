@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AppError } from '../utils/error';
 import { logger } from '../utils/logger';
 
-export const requireAdmin = (req: Request, res: Response, next: NextFunction): void => {
+export const requireAdmin = (req: Request, _res: Response, next: NextFunction): void => {
   if (req.user?.role !== 'admin') {
     logger.warn('Unauthorized admin access attempt:', {
       userId: req.user?.id,
@@ -16,7 +16,7 @@ export const requireAdmin = (req: Request, res: Response, next: NextFunction): v
   next();
 };
 
-export const requireStaff = (req: Request, res: Response, next: NextFunction): void => {
+export const requireStaff = (req: Request, _res: Response, next: NextFunction): void => {
   if (req.user?.role !== 'staff') {
     logger.warn('Unauthorized staff access attempt:', {
       userId: req.user?.id,

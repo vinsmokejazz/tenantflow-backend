@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AnyZodObject, ZodError } from 'zod';
-import { AppError } from './errorHandler';
+import { AppError } from '../utils/error';
 import { logger } from '../utils/logger';
 
 export const validate = (schema: AnyZodObject) => {
@@ -19,7 +19,7 @@ export const validate = (schema: AnyZodObject) => {
           method: req.method,
           errors: error.errors,
         });
-        next(new AppError(400, 'Validation error', true));
+        next(AppError.ValidationError('Validation error'));
         return;
       }
       next(error);

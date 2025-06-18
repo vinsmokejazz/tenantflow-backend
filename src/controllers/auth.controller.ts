@@ -1,12 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import { supabaseAdmin } from "../config/supabase";
-import jwt, { SignOptions } from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { AppError } from '../utils/error';
-import { logger } from '../utils/logger';
-import { config } from '../config/config';
 import { prisma } from '../lib/prisma';
-import { Prisma, User } from '@prisma/client';
 import { createClient } from '@supabase/supabase-js';
 import { signToken, JwtPayload } from '../utils/jwt';
 
@@ -270,6 +266,12 @@ export const signUpBusiness = async (req: Request, res: Response, next: NextFunc
       return;
     }
 
+    if (!data.user?.email) {
+      throw new Error('User email is required');
+    }
+
+    const defaultName = email.split('@')[0];
+
     // Create user in our database
     await prisma.user.create({
       data: {
@@ -277,22 +279,24 @@ export const signUpBusiness = async (req: Request, res: Response, next: NextFunc
         email,
         role: "admin",
         businessId: business.id,
+        supabase_id: data.user.id,
+        name: defaultName,
       },
     });
 
     // Generate tokens
-    const tokens = signToken({
+    const token = signToken({
       id: data.user.id,
       email: data.user.email,
-      name: data.user.name,
-      role: data.user.role,
-      businessId: data.user.businessId,
+      name: defaultName,
+      role: "admin", // Use the role we set in user_metadata
+      businessId: business.id, // Use the business ID we just created
     });
 
     res.status(201).json({
       message: "Business and admin user created successfully",
       businessId: business.id,
-      ...tokens
+      token
     });
   } catch (error: any) {
     next(error);
@@ -323,10 +327,10 @@ export const signIn = async (req: Request, res: Response, next: NextFunction): P
       return;
     }
 
-    const tokens = signToken({
+    const token = signToken({
       id: user.id,
       email: user.email,
-      name: user.name,
+      name: user.name || '',
       role: user.role,
       businessId: user.businessId,
     });
@@ -338,9 +342,9 @@ export const signIn = async (req: Request, res: Response, next: NextFunction): P
         name: user.name,
         role: user.role,
         businessId: user.businessId,
-        businessName: user.business.name
+        businessName: user.business?.name || null
       },
-      ...tokens
+      token
     });
   } catch (error: any) {
     next(error);
@@ -374,7 +378,12 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
     return;
   }
   try {
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!) as { userId: string };
+    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!) as {
+      email: string;
+      name: string;
+      role: string;
+      businessId: string; userId: string 
+};
     const tokens = signToken({
       id: decoded.userId,
       email: decoded.email,
@@ -390,9 +399,9 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
   }
 };
 
-export const signupStaff = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const signupStaff = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   const { email, password } = req.body;
-  const businessId = req.user?.business_id;
+  const businessId = req.user?.businessId;
 
   if (!businessId) {
     res.status(403).json({ error: "Not authorized to create users" });
@@ -417,12 +426,20 @@ export const signupStaff = async (req: Request, res: Response, next: NextFunctio
       return;
     }
 
+    if (!data.user?.email) {
+      throw new Error('User email is required');
+    }
+
+    const defaultName = email.split('@')[0];
+
     await prisma.user.create({
       data: {
         id: data.user.id,
-        email,
+        email: data.user.email,
         role: "staff",
         businessId,
+        supabase_id: data.user.id,
+        name: defaultName
       }
     });
 

@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { AnalyticsModel, AnalyticsData, Metrics } from '../models/analytics.model';
+import { AnalyticsModel, AnalyticsData } from '../models/analytics.model';
 import { AppError } from '../utils/error';
 import { AIAnalyticsService } from '../services/aiAnalytics.service';
 import { logger } from '../utils/logger';
@@ -62,8 +62,11 @@ export class AnalyticsController {
       // Get aggregated metrics
       const metrics = await this.analyticsModel.getAggregatedMetrics(businessId, start, end);
 
-      // Get AI insights
-      const aiInsights = await this.aiService.generateInsights(metrics);
+      // Get AI insights with businessId
+      const aiInsights = await this.aiService.generateInsights({
+        ...metrics,
+        businessId
+      });
 
       res.status(200).json({
         status: 'success',

@@ -3,43 +3,25 @@ import jwt from 'jsonwebtoken';
 import { AppError } from '../utils/error';
 import { logger } from '../utils/logger';
 import { prisma } from '../config/prisma';
-import { createClient } from '@supabase/supabase-js';
 import { Prisma } from '@prisma/client';
-
-interface JwtPayload {
-  sub: string;
-  email: string;
-  role: string;
-  businessId: string;
-  exp: number;
-}
+import { JwtPayload } from '../utils/jwt';
 
 // Define AuthRequest interface
 interface AuthRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-    role: string;
-    businessId: string;
-  };
+  user?: JwtPayload;
 }
 
 declare global {
   namespace Express {
     interface Request {
-      user?: {
-        id: string;
-        email: string;
-        role: string;
-        businessId: string;
-      };
+      user?: JwtPayload;
     }
   }
 }
 
 export const authenticate = async (
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
@@ -59,10 +41,11 @@ export const authenticate = async (
 
     // Verify user still exists
     const user = await prisma.user.findUnique({
-      where: { id: decoded.sub },
+      where: { id: decoded.id },
       select: {
         id: true,
         email: true,
+        name: true,
         role: true,
         businessId: true
       }
@@ -76,6 +59,7 @@ export const authenticate = async (
     req.user = {
       id: user.id,
       email: user.email,
+      name: user.name || '',
       role: user.role,
       businessId: user.businessId
     };
@@ -102,7 +86,7 @@ export const authenticate = async (
 };
 
 export const authorize = (...roles: string[]) => {
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return (req: Request, _res: Response, next: NextFunction): void => {
     if (!req.user) {
       next(AppError.AuthenticationError('Authentication required'));
       return;
@@ -124,7 +108,7 @@ export const authorize = (...roles: string[]) => {
   };
 };
 
-export const validateBusinessAccess = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const validateBusinessAccess = (req: AuthRequest, _res: Response, next: NextFunction) => {
   try {
     if (!req.user) {
       throw AppError.AuthenticationError('User not authenticated');

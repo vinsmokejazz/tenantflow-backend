@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
 import { AppError } from '../utils/error';
@@ -18,9 +18,7 @@ interface ErrorResponse {
 export const errorHandler = (
   err: Error,
   req: Request,
-  res: Response,
-  next: NextFunction
-): void => {
+  res: Response): void => {
   let errorResponse: ErrorResponse = {
     status: 'error',
     message: 'Internal server error'
@@ -115,3 +113,5 @@ export const errorHandler = (
 
   res.status(errorResponse.status === 'fail' ? 400 : 500).json(errorResponse);
 }; 
+
+export { AppError };

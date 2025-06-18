@@ -15,7 +15,7 @@ clientRouter.use(authenticateUser);
 
 // GET all clients - accessible by both admin and staff
 clientRouter.get('/', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  const businessId = req.user?.business_id;
+  const businessId = req.user?.businessId;
   
   try {
     const clients = await prisma.client.findMany({
@@ -30,7 +30,7 @@ clientRouter.get('/', async (req: Request, res: Response, next: NextFunction): P
 // GET single client - accessible by both admin and staff
 clientRouter.get('/:id', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { id } = req.params;
-  const businessId = req.user?.business_id;
+  const businessId = req.user?.businessId;
 
   try {
     const client = await prisma.client.findFirst({
@@ -54,7 +54,7 @@ clientRouter.get('/:id', async (req: Request, res: Response, next: NextFunction)
 // POST new client - admin only
 clientRouter.post('/', requireRole(['admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { name, email, phone } = req.body;
-  const businessId = req.user?.business_id;
+  const businessId = req.user?.businessId;
 
   if (!businessId) {
     res.status(403).json({ error: "Unauthorized: missing business ID" });
@@ -90,7 +90,7 @@ clientRouter.post('/', requireRole(['admin']), async (req: Request, res: Respons
 clientRouter.put('/:id', requireRole(['admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { id } = req.params;
   const { name, email, phone } = req.body;
-  const businessId = req.user?.business_id;
+  const businessId = req.user?.businessId;
 
   try {
     const client = await prisma.client.updateMany({
@@ -119,7 +119,7 @@ clientRouter.put('/:id', requireRole(['admin']), async (req: Request, res: Respo
 // DELETE client - admin only
 clientRouter.delete('/:id', requireRole(['admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { id } = req.params;
-  const businessId = req.user?.business_id;
+  const businessId = req.user?.businessId;
 
   try {
     const deleted = await prisma.client.deleteMany({

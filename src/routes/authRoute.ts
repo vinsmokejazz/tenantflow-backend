@@ -6,7 +6,7 @@ import {
   resetPassword,
   updatePassword
 } from '../controllers/auth.controller';
-import { protect, restrictTo } from '../middleware/auth.middleware';
+import { authenticate } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
 import { 
   registerSchema,
@@ -15,6 +15,7 @@ import {
   resetPasswordSchema,
   changePasswordSchema
 } from '../validations/auth.validation';
+
 
 const authRouter = express.Router();
 
@@ -26,7 +27,7 @@ authRouter.post('/reset-password/:token', validate(resetPasswordSchema), resetPa
 
 // Protected routes
 authRouter.post('/change-password',
-  protect,
+  authenticate,
   validate(changePasswordSchema),
   updatePassword
 );

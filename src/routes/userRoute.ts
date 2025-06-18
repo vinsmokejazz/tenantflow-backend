@@ -1,6 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth.middleware';
 import { requireAdmin } from '../middleware/authRoles';
 import { validateRequest } from '../middleware/validationMiddleware';
@@ -8,16 +7,10 @@ import { userValidation } from '../validations/user.validation';
 import { AppError } from '../utils/error';
 import { prisma } from '../config/prisma';
 import { Prisma } from '@prisma/client';
-
-interface AuthenticatedUser {
-  id: string;
-  email: string;
-  businessId: string;
-  role: string;
-}
+import { JwtPayload } from '../utils/jwt';
 
 interface AuthenticatedRequest extends Request {
-  user?: AuthenticatedUser;
+  user?: JwtPayload;
 }
 
 const userRouter = express.Router();
@@ -31,7 +24,7 @@ userRouter.use(authenticate);
 userRouter.get('/', requireAdmin, validateRequest(userValidation.getUsers), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.user) {
-      throw new AppError('Unauthorized', 401);
+      throw AppError.AuthenticationError('Unauthorized');
     }
 
     const role = typeof req.query.role === 'string' ? req.query.role : undefined;
@@ -59,7 +52,7 @@ userRouter.get('/', requireAdmin, validateRequest(userValidation.getUsers), asyn
 userRouter.get('/:id', requireAdmin, validateRequest(userValidation.getUser), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.user) {
-      throw new AppError('Unauthorized', 401);
+      throw AppError.AuthenticationError('Unauthorized');
     }
 
     const id = req.params.id as string;
@@ -79,7 +72,7 @@ userRouter.get('/:id', requireAdmin, validateRequest(userValidation.getUser), as
     });
 
     if (!user) {
-      throw new AppError('User not found', 404);
+      throw AppError.NotFoundError('User not found');
     }
 
     res.json(user);
@@ -92,7 +85,7 @@ userRouter.get('/:id', requireAdmin, validateRequest(userValidation.getUser), as
 userRouter.post('/', requireAdmin, validateRequest(userValidation.createUser), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.user) {
-      throw new AppError('Unauthorized', 401);
+      throw AppError.AuthenticationError('Unauthorized');
     }
 
     const { email, name, role } = req.body;
@@ -106,7 +99,7 @@ userRouter.post('/', requireAdmin, validateRequest(userValidation.createUser), a
     });
 
     if (existingUser) {
-      throw new AppError('User already exists', 400);
+      throw AppError.ValidationError('User already exists');
     }
 
     const userData: Prisma.UserCreateInput = {
@@ -143,7 +136,7 @@ userRouter.post('/', requireAdmin, validateRequest(userValidation.createUser), a
 userRouter.put('/:id', requireAdmin, validateRequest(userValidation.updateUser), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.user) {
-      throw new AppError('Unauthorized', 401);
+      throw AppError.AuthenticationError('Unauthorized');
     }
 
     const id = req.params.id as string;
@@ -158,12 +151,12 @@ userRouter.put('/:id', requireAdmin, validateRequest(userValidation.updateUser),
     });
 
     if (!existingUser) {
-      throw new AppError('User not found', 404);
+      throw AppError.NotFoundError('User not found');
     }
 
     // Only admin can update roles
-    if (role && req.user.role !== 'admin') {
-      throw new AppError('Only admin can update user roles', 403);
+    if (role && req.user?.role !== 'admin') {
+      throw AppError.AuthorizationError('Only admin can update user roles');
     }
 
     const userData: Prisma.UserUpdateInput = {
@@ -197,7 +190,7 @@ userRouter.put('/:id', requireAdmin, validateRequest(userValidation.updateUser),
 userRouter.delete('/:id', requireAdmin, validateRequest(userValidation.deleteUser), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.user) {
-      throw new AppError('Unauthorized', 401);
+      throw AppError.AuthenticationError('Unauthorized');
     }
 
     const id = req.params.id as string;
@@ -210,12 +203,12 @@ userRouter.delete('/:id', requireAdmin, validateRequest(userValidation.deleteUse
     });
 
     if (!existingUser) {
-      throw new AppError('User not found', 404);
+      throw AppError.NotFoundError('User not found');
     }
 
     // Prevent self-deletion
     if (id === req.user.id) {
-      throw new AppError('Cannot delete your own account', 400);
+      throw AppError.ValidationError('Cannot delete your own account');
     }
 
     await prisma.user.delete({

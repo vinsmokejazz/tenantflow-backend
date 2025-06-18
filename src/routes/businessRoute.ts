@@ -16,7 +16,7 @@ businessRouter.use(cors());
 businessRouter.use(authenticate);
 
 businessRouter.get('/', (async (req: Request, res: Response, next: NextFunction) => {
-  const businessId = req.user?.business_id;
+  const businessId = req.user?.businessId;
   
   try {
     const business = await prisma.business.findFirst({
