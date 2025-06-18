@@ -4,21 +4,44 @@ globs:
 alwaysApply: true
 ---
 {
-  "metadata": {
-    "name": "Fix Supabase Auth Metadata with business_id",
-    "description": "Automatically rewrites signUpBusiness to attach business_id to Supabase user metadata after creation. Required for RLS to work properly.",
-    "tags": ["supabase", "auth", "rls", "metadata"],
-    "ruleType": "auto attached"
+  "name": "Rename businessId to business_id",
+  "description": "Update all businessId references to business_id across the codebase",
+  "match": {
+    "include": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.prisma"]
   },
-  "matches": [
+  "type": "auto attached",
+  "rewrite": [
     {
-      "include": "**/controllers/authController.ts"
-    }
-  ],
-  "replaces": [
+      "pattern": "\\bbusinessId\\b",
+      "replacement": "business_id"
+    },
     {
-      "pattern": ".*",
-      "replacement": "import { PrismaClient } from \"@prisma/client\";\nimport { Request, Response } from \"express\";\nimport { supabaseAdmin } from \"../config/supabase\";\n\nconst prisma = new PrismaClient();\n\nexport const signUpBusiness = async (req: Request, res: Response) => {\n  try {\n    const { email, password, name, address } = req.body;\n\n    // Step 1: Create Supabase user\n    const { data: userData, error: createUserError } = await supabaseAdmin.auth.admin.createUser({\n      email,\n      password,\n      user_metadata: {\n        name\n      }\n    });\n\n    if (createUserError || !userData?.user) {\n      return res.status(400).json({ error: createUserError?.message || \"Supabase user creation failed\" });\n    }\n\n    const supabaseUser = userData.user;\n\n    // Step 2: Create business in your own database\n    const business = await prisma.business.create({\n      data: {\n        name,\n        address,\n        userId: supabaseUser.id\n      }\n    });\n\n    // Step 3: Update Supabase user metadata with business_id (required for RLS)\n    const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(supabaseUser.id, {\n      user_metadata: {\n        name,\n        business_id: business.id\n      }\n    });\n\n    if (metadataError) {\n      return res.status(500).json({ error: metadataError.message });\n    }\n\n    return res.status(201).json({ user: supabaseUser, business });\n  } catch (error) {\n    console.error(\"Signup Error:\", error);\n    return res.status(500).json({ error: \"Internal Server Error\" });\n  }\n};"
+      "pattern": "\\bBusinessId\\b",
+      "replacement": "Business_Id"
+    },
+    {
+      "pattern": "\\.businessId\\b",
+      "replacement": ".business_id"
+    },
+    {
+      "pattern": "\\['businessId'\\]",
+      "replacement": "['business_id']"
+    },
+    {
+      "pattern": '\\"businessId\\"',
+      "replacement": '"business_id"'
+    },
+    {
+      "pattern": "businessId:",
+      "replacement": "business_id:"
+    },
+    {
+      "pattern": "businessId =",
+      "replacement": "business_id ="
+    },
+    {
+      "pattern": "businessId =>",
+      "replacement": "business_id =>"
     }
   ]
 }

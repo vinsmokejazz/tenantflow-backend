@@ -22,12 +22,14 @@ export const authenticateUser = async (
 
   const role = user?.user_metadata?.role || "staff";
   const business_id = user?.user_metadata?.business_id;
+  const name = user?.user_metadata?.name || user.email?.split('@')[0] || 'User';
 
   req.user = {
     id: user.id,
     email: user.email!,
+    name,
     role,
-    business_id,
+    businessId: business_id,
   };
   next();
 };
