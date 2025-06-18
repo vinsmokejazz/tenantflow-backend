@@ -200,7 +200,7 @@ export const signUpBusiness = async (req: Request, res: Response, next: NextFunc
   const { email, password, businessName, subscription = 'free' } = req.body;
   
   try {
-    // Create business first
+    // Step 1: Create business first
     const business = await prisma.business.create({
       data: {
         name: businessName,
@@ -208,14 +208,14 @@ export const signUpBusiness = async (req: Request, res: Response, next: NextFunc
       }
     });
 
-    // Create user in Supabase with business metadata
+    // Step 2: Create user in Supabase with initial metadata
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
       user_metadata: {
-        role: "admin",
-        business_id: business.id,
+        name: email.split('@')[0], // Default name from email
+        role: "admin"
       }
     });
 
@@ -233,7 +233,7 @@ export const signUpBusiness = async (req: Request, res: Response, next: NextFunc
 
     const defaultName = email.split('@')[0];
 
-    // Create user in our database
+    // Step 3: Create user in our database
     const dbUser = await prisma.user.create({
       data: {
         email,
@@ -243,6 +243,24 @@ export const signUpBusiness = async (req: Request, res: Response, next: NextFunc
         name: defaultName,
       },
     });
+
+    // Step 4: Update Supabase user metadata with business_id (required for RLS)
+    const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(data.user.id, {
+      user_metadata: {
+        name: defaultName,
+        role: "admin",
+        business_id: business.id
+      }
+    });
+
+    if (metadataError) {
+      // Log the error but don't fail the request since user is already created
+      logger.error('Failed to update Supabase user metadata:', {
+        error: metadataError,
+        userId: data.user.id,
+        businessId: business.id
+      });
+    }
 
     res.status(201).json({
       message: "Business and admin user created successfully",
