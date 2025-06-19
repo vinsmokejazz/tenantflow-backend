@@ -6,7 +6,7 @@ import { validateRequest } from '../middleware/validationMiddleware';
 import { userValidation } from '../validations/user.validation';
 import { AppError } from '../utils/error';
 import { prisma } from '../config/prisma';
-import { Prisma } from '@prisma/client';
+import { supabaseAdmin } from '../config/supabase';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -21,16 +21,12 @@ interface AuthenticatedRequest extends Request {
 const userRouter = express.Router();
 
 userRouter.use(cors());
-
-// Apply authentication to all routes
 userRouter.use(authenticate);
 
 // GET all users
 userRouter.get('/', requireAdmin, validateRequest(userValidation.getUsers), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    if (!req.user) {
-      throw AppError.AuthenticationError('Unauthorized');
-    }
+    if (!req.user) throw AppError.AuthenticationError('Unauthorized');
 
     const role = typeof req.query.role === 'string' ? req.query.role : undefined;
     const users = await prisma.user.findMany({
@@ -47,23 +43,21 @@ userRouter.get('/', requireAdmin, validateRequest(userValidation.getUsers), asyn
         updatedAt: true
       }
     });
+
     res.json(users);
   } catch (error) {
     next(error);
   }
 });
 
-// GET user by ID
+// GET single user
 userRouter.get('/:id', requireAdmin, validateRequest(userValidation.getUser), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    if (!req.user) {
-      throw AppError.AuthenticationError('Unauthorized');
-    }
+    if (!req.user) throw AppError.AuthenticationError('Unauthorized');
 
-    const id = req.params.id as string;
     const user = await prisma.user.findFirst({
       where: {
-        id,
+        id: req.params.id,
         businessId: req.user.businessId
       },
       select: {
@@ -76,51 +70,44 @@ userRouter.get('/:id', requireAdmin, validateRequest(userValidation.getUser), as
       }
     });
 
-    if (!user) {
-      throw AppError.NotFoundError('User not found');
-    }
-
+    if (!user) throw AppError.NotFoundError('User not found');
     res.json(user);
   } catch (error) {
     next(error);
   }
 });
 
-// POST new user - admin only
+// POST create user
 userRouter.post('/', requireAdmin, validateRequest(userValidation.createUser), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    if (!req.user) {
-      throw AppError.AuthenticationError('Unauthorized');
-    }
+    if (!req.user) throw AppError.AuthenticationError('Unauthorized');
+    const { email, password, name, role } = req.body;
 
-    const { email, name, role } = req.body;
-
-    // Check if user already exists
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        email,
-        businessId: req.user.businessId
+    // Supabase user creation
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      user_metadata: {
+        name,
+        role,
+        business_id: req.user.businessId
       }
     });
 
-    if (existingUser) {
-      throw AppError.ValidationError('User already exists');
+    if (error || !data?.user) {
+      throw AppError.ValidationError('Supabase user creation failed: ' + error?.message);
     }
 
-    const userData: Prisma.UserCreateInput = {
-      email,
-      name,
-      role,
-      business: {
-        connect: {
-          id: req.user.businessId
+    const user = await prisma.user.create({
+      data: {
+        email,
+        name,
+        role,
+        supabase_id: data.user.id,
+        business: {
+          connect: { id: req.user.businessId }
         }
       },
-      supabase_id: email // Using email as supabase_id for now
-    };
-
-    const user = await prisma.user.create({
-      data: userData,
       select: {
         id: true,
         email: true,
@@ -137,44 +124,28 @@ userRouter.post('/', requireAdmin, validateRequest(userValidation.createUser), a
   }
 });
 
-// PUT update user - admin only
+// PUT update user
 userRouter.put('/:id', requireAdmin, validateRequest(userValidation.updateUser), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    if (!req.user) {
-      throw AppError.AuthenticationError('Unauthorized');
-    }
+    if (!req.user) throw AppError.AuthenticationError('Unauthorized');
 
-    const id = req.params.id as string;
     const { email, name, role } = req.body;
-
-    // Check if user exists and belongs to the same business
-    const existingUser = await prisma.user.findFirst({
+    const userToUpdate = await prisma.user.findFirst({
       where: {
-        id,
+        id: req.params.id,
         businessId: req.user.businessId
       }
     });
 
-    if (!existingUser) {
-      throw AppError.NotFoundError('User not found');
-    }
+    if (!userToUpdate) throw AppError.NotFoundError('User not found');
 
-    // Only admin can update roles
-    if (role && req.user?.role !== 'admin') {
+    if (role && req.user.role !== 'admin') {
       throw AppError.AuthorizationError('Only admin can update user roles');
     }
 
-    const userData: Prisma.UserUpdateInput = {
-      email,
-      name,
-      role
-    };
-
-    const user = await prisma.user.update({
-      where: {
-        id
-      },
-      data: userData,
+    const updated = await prisma.user.update({
+      where: { id: req.params.id },
+      data: { email, name, role },
       select: {
         id: true,
         email: true,
@@ -185,47 +156,34 @@ userRouter.put('/:id', requireAdmin, validateRequest(userValidation.updateUser),
       }
     });
 
-    res.json(user);
+    res.json(updated);
   } catch (error) {
     next(error);
   }
 });
 
-// DELETE user - admin only
+// DELETE user
 userRouter.delete('/:id', requireAdmin, validateRequest(userValidation.deleteUser), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    if (!req.user) {
-      throw AppError.AuthenticationError('Unauthorized');
-    }
+    if (!req.user) throw AppError.AuthenticationError('Unauthorized');
+    const { id } = req.params;
 
-    const id = req.params.id as string;
-    // Check if user exists and belongs to the same business
-    const existingUser = await prisma.user.findFirst({
+    if (id === req.user.id) throw AppError.ValidationError('Cannot delete your own account');
+
+    const user = await prisma.user.findFirst({
       where: {
         id,
         businessId: req.user.businessId
       }
     });
 
-    if (!existingUser) {
-      throw AppError.NotFoundError('User not found');
-    }
+    if (!user) throw AppError.NotFoundError('User not found');
 
-    // Prevent self-deletion
-    if (id === req.user.id) {
-      throw AppError.ValidationError('Cannot delete your own account');
-    }
-
-    await prisma.user.delete({
-      where: {
-        id
-      }
-    });
-
+    await prisma.user.delete({ where: { id } });
     res.status(204).send();
   } catch (error) {
     next(error);
   }
 });
 
-export default userRouter; 
+export default userRouter;
