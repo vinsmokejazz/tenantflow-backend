@@ -26,6 +26,7 @@ try {
 export const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: {
     autoRefreshToken: false,
-    persistSession: false
+    persistSession: false,
+    detectSessionInUrl: false,
   }
 });
