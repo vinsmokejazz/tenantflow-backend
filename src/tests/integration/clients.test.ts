@@ -3,8 +3,8 @@ import { app } from '../../index';
 
 describe('Client Endpoints', () => {
   let authToken: string;
-  let businessId: string;
   let clientId: string;
+  let businessId: string;
 
   const testUser = {
     email: 'client-manager@example.com',
@@ -24,8 +24,8 @@ describe('Client Endpoints', () => {
     const registerResponse = await request(app)
       .post('/api/v1/auth/register')
       .send(testUser);
-
-    businessId = registerResponse.body.user.businessId;
+    console.log('REGISTER RESPONSE:', registerResponse.body);
+    businessId = registerResponse.body.user?.businessId;
 
     const loginResponse = await request(app)
       .post('/api/v1/auth/login')

@@ -3,9 +3,9 @@ import { app } from '../../index';
 
 describe('Follow-up Endpoints', () => {
   let authToken: string;
-  let businessId: string;
   let clientId: string;
   let followUpId: string;
+  let businessId: string;
 
   const testUser = {
     email: 'followup-manager@example.com',
@@ -32,7 +32,8 @@ describe('Follow-up Endpoints', () => {
       .post('/api/v1/auth/register')
       .send(testUser);
 
-    businessId = registerResponse.body.user.businessId;
+    console.log('REGISTER RESPONSE:', registerResponse.body);
+    businessId = registerResponse.body.user?.businessId;
 
     const loginResponse = await request(app)
       .post('/api/v1/auth/login')

@@ -3,11 +3,9 @@ import { app } from '../../index';
 
 describe('Complete Workflow Integration', () => {
   let authToken: string;
-  let businessId: string;
   let clientId: string;
   let leadId: string;
   let followUpId: string;
-  let staffUserId: string;
 
   const adminUser = {
     email: 'workflow-admin@example.com',
@@ -48,7 +46,6 @@ describe('Complete Workflow Integration', () => {
       .send(adminUser);
 
     expect(registerResponse.status).toBe(201);
-    businessId = registerResponse.body.user.businessId;
 
     // Step 2: Login admin
     const loginResponse = await request(app)
@@ -68,7 +65,6 @@ describe('Complete Workflow Integration', () => {
       .send(staffUser);
 
     expect(createStaffResponse.status).toBe(201);
-    staffUserId = createStaffResponse.body.id;
 
     // Step 4: Create client
     const createClientResponse = await request(app)

@@ -128,4 +128,7 @@ process.on('unhandledRejection', (reason: unknown) => {
   gracefulShutdown('UNHANDLED_REJECTION');
 });
 
-main();
+// Replace main() call with conditional
+if (process.env.NODE_ENV !== 'test') {
+  main();
+}

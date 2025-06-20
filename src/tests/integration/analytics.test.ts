@@ -19,7 +19,8 @@ describe('Analytics Endpoints', () => {
       .post('/api/v1/auth/register')
       .send(testUser);
 
-    businessId = registerResponse.body.user.businessId;
+    console.log('REGISTER RESPONSE:', registerResponse.body);
+    businessId = registerResponse.body.user?.businessId;
 
     const loginResponse = await request(app)
       .post('/api/v1/auth/login')

@@ -4,8 +4,6 @@ import { app } from '../../index';
 describe('User Management Endpoints', () => {
   let adminToken: string;
   let staffToken: string;
-  let businessId: string;
-  let staffUserId: string;
 
   const adminUser = {
     email: 'admin@example.com',
@@ -26,8 +24,6 @@ describe('User Management Endpoints', () => {
     const registerResponse = await request(app)
       .post('/api/v1/auth/register')
       .send(adminUser);
-
-    businessId = registerResponse.body.user.businessId;
 
     const loginResponse = await request(app)
       .post('/api/v1/auth/login')
@@ -51,8 +47,6 @@ describe('User Management Endpoints', () => {
       expect(response.body.name).toBe(staffUser.name);
       expect(response.body.role).toBe('staff');
       expect(response.body).toHaveProperty('id');
-
-      staffUserId = response.body.id;
     });
 
     it('should fail without admin privileges', async () => {
@@ -99,15 +93,6 @@ describe('User Management Endpoints', () => {
   });
 
   describe('GET /api/v1/user', () => {
-    beforeEach(async () => {
-      const response = await request(app)
-        .post('/api/v1/user')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send(staffUser);
-      
-      staffUserId = response.body.id;
-    });
-
     it('should get all users for business', async () => {
       const response = await request(app)
         .get('/api/v1/user')
@@ -151,15 +136,6 @@ describe('User Management Endpoints', () => {
   });
 
   describe('GET /api/v1/user/:id', () => {
-    beforeEach(async () => {
-      const response = await request(app)
-        .post('/api/v1/user')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send(staffUser);
-      
-      staffUserId = response.body.id;
-    });
-
     it('should get user by ID', async () => {
       const response = await request(app)
         .get(`/api/v1/user/${staffUserId}`)
@@ -181,15 +157,6 @@ describe('User Management Endpoints', () => {
   });
 
   describe('PUT /api/v1/user/:id', () => {
-    beforeEach(async () => {
-      const response = await request(app)
-        .post('/api/v1/user')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send(staffUser);
-      
-      staffUserId = response.body.id;
-    });
-
     it('should update user successfully', async () => {
       const updateData = {
         name: 'Updated Staff Name',
@@ -218,15 +185,6 @@ describe('User Management Endpoints', () => {
   });
 
   describe('DELETE /api/v1/user/:id', () => {
-    beforeEach(async () => {
-      const response = await request(app)
-        .post('/api/v1/user')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send(staffUser);
-      
-      staffUserId = response.body.id;
-    });
-
     it('should delete user successfully', async () => {
       const response = await request(app)
         .delete(`/api/v1/user/${staffUserId}`)
