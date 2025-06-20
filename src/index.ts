@@ -132,3 +132,6 @@ process.on('unhandledRejection', (reason: unknown) => {
 if (process.env.NODE_ENV !== 'test') {
   main();
 }
+
+
+

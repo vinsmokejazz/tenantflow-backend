@@ -23,25 +23,31 @@ const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_
 
 export const register = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    console.log('Starting registration');
     const { email, password, name, business_name } = req.body;
 
+    console.log('Attempting Supabase signup...');
     // Create user in Supabase
     const { data: { user }, error: supabaseError } = await supabase.auth.signUp({
       email,
       password,
     });
+    console.log('Supabase signup result:', { user, supabaseError });
 
     if (supabaseError || !user) {
       throw AppError.ValidationError(supabaseError?.message || 'Failed to create user');
     }
 
+    console.log('Attempting business creation...');
     // Create business
     const business = await prisma.business.create({
       data: {
         name: business_name,
       },
     });
+    console.log('Business created:', business);
 
+    console.log('Attempting DB user creation...');
     // Create user in our database
     const dbUser = await prisma.user.create({
       data: {
@@ -52,6 +58,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         businessId: business.id,
       },
     });
+    console.log('DB user created:', dbUser);
 
     logger.info('User registered:', {
       userId: dbUser.id,
@@ -70,6 +77,10 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       },
     });
   } catch (error) {
+    console.error('Registration error:', error);
+    if (error instanceof Error) {
+      console.error('Stack trace:', error.stack);
+    }
     next(error);
   }
 };

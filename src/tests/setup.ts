@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { supabaseAdmin } from '../../src/config/supabase';
 
 const prisma = new PrismaClient();
 
@@ -35,13 +36,24 @@ async function cleanDatabase() {
   }
 }
 
+async function deleteSupabaseUserByEmail(email: string) {
+  const { data, error } = await supabaseAdmin.auth.admin.listUsers();
+  if (error) return;
+  const user = data.users.find((u: any) => u.email === email);
+  if (user) {
+    await supabaseAdmin.auth.admin.deleteUser(user.id);
+  }
+}
+
 // Global test utilities
 global.testUtils = {
   cleanDatabase,
+  deleteSupabaseUserByEmail,
 };
 
 declare global {
   var testUtils: {
     cleanDatabase: () => Promise<void>;
+    deleteSupabaseUserByEmail: (email: string) => Promise<void>;
   };
 }

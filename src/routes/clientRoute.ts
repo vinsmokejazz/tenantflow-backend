@@ -1,7 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
-import { authenticateUser, requireRole } from '../middleware/authMiddleware';
+import { authenticate, authorize } from '../middleware/auth.middleware';
 import { checkClientLimit } from '../controllers/auth.controller';
 
 const clientRouter = express.Router();
@@ -11,7 +11,7 @@ const prisma = new PrismaClient();
 clientRouter.use(cors());
 
 // Protect all routes with authentication
-clientRouter.use(authenticateUser);
+clientRouter.use(authenticate);
 
 // GET all clients - accessible by both admin and staff
 clientRouter.get('/', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -52,7 +52,7 @@ clientRouter.get('/:id', async (req: Request, res: Response, next: NextFunction)
 });
 
 // POST new client - admin only
-clientRouter.post('/', requireRole(['admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+clientRouter.post('/', authorize('admin'), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { name, email, phone } = req.body;
   const businessId = req.user?.businessId;
 
@@ -87,7 +87,7 @@ clientRouter.post('/', requireRole(['admin']), async (req: Request, res: Respons
 });
 
 // PUT update client - admin only
-clientRouter.put('/:id', requireRole(['admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+clientRouter.put('/:id', authorize('admin'), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { id } = req.params;
   const { name, email, phone } = req.body;
   const businessId = req.user?.businessId;
@@ -117,7 +117,7 @@ clientRouter.put('/:id', requireRole(['admin']), async (req: Request, res: Respo
 });
 
 // DELETE client - admin only
-clientRouter.delete('/:id', requireRole(['admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+clientRouter.delete('/:id', authorize('admin'), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { id } = req.params;
   const businessId = req.user?.businessId;
 
