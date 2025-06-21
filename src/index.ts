@@ -20,6 +20,7 @@ import analyticsRouter from './routes/analyticsRoute';
 import dealRouter from './routes/dealRoute';
 import reportRouter from './routes/reportRoute';
 import aiInsightsRouter from './routes/aiInsightsRoute';
+import subscriptionRouter from './routes/subscriptionRoute';
 
 // Create Express app
 export const app: Express = express();
@@ -69,6 +70,7 @@ app.use(`/api/${API_VERSION}/analytics`, analyticsRouter);
 app.use(`/api/${API_VERSION}/deals`, dealRouter);
 app.use(`/api/${API_VERSION}/reports`, reportRouter);
 app.use(`/api/${API_VERSION}/ai-insights`, aiInsightsRouter);
+app.use(`/api/${API_VERSION}/subscription`, subscriptionRouter);
 
 // Health check endpoint
 app.get('/health', (_req, res) => {

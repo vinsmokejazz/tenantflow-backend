@@ -12,20 +12,51 @@ datasource db {
 }
 
 model Business {
-  name         String
-  createdAt    DateTime    @default(now()) @map("created_at")
-  updatedAt    DateTime    @updatedAt @map("updated_at")
-  subscription String      @default("free")
-  id           String      @id @default(uuid()) @db.Uuid
-  analytics    Analytics[]
-  clients      Client[]
-  deals        Deal[]
-  followUps    FollowUp[]
-  leads        Lead[]
-  users        User[]
-  reports      Report[]
+  name                    String
+  createdAt               DateTime    @default(now()) @map("created_at")
+  updatedAt               DateTime    @updatedAt @map("updated_at")
+  subscription            String      @default("free")
+  subscriptionId          String?     @map("subscription_id")
+  stripeCustomerId        String?     @map("stripe_customer_id")
+  stripeSubscriptionId    String?     @map("stripe_subscription_id")
+  subscriptionStatus      String      @default("active") @map("subscription_status")
+  subscriptionStartDate   DateTime?   @map("subscription_start_date")
+  subscriptionEndDate     DateTime?   @map("subscription_end_date")
+  trialEndDate            DateTime?   @map("trial_end_date")
+  billingEmail            String?     @map("billing_email")
+  address                 String?
+  phone                   String?
+  website                 String?
+  industry                String?
+  id                      String      @id @default(uuid()) @db.Uuid
+  analytics               Analytics[]
+  clients                 Client[]
+  deals                   Deal[]
+  followUps               FollowUp[]
+  leads                   Lead[]
+  users                   User[]
+  reports                 Report[]
+  subscriptionHistory     SubscriptionHistory[]
 
   @@map("businesses")
+  @@schema("public")
+}
+
+model SubscriptionHistory {
+  id                String   @id @default(uuid()) @db.Uuid
+  businessId        String   @map("business_id") @db.Uuid
+  subscription      String
+  stripeEventId     String?  @map("stripe_event_id")
+  eventType         String   @map("event_type") // created, updated, cancelled, etc.
+  amount            Float?
+  currency          String   @default("usd")
+  status            String
+  metadata          Json?
+  createdAt         DateTime @default(now()) @map("created_at")
+  business          Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId])
+  @@map("subscription_history")
   @@schema("public")
 }
 
@@ -40,6 +71,7 @@ model User {
   resetToken        String?
   resetTokenExpires DateTime?
   supabase_id       String    @unique @db.Uuid
+  clerkId           String?   @unique @map("clerk_id")
   id                String    @id @default(uuid()) @db.Uuid
   business          Business  @relation(fields: [businessId], references: [id])
   assignedLeads     Lead[]
