@@ -17,7 +17,8 @@ export const userValidation = {
     body: z.object({
       email: z.string().email('Invalid email address'),
       name: z.string().min(1, 'Name is required'),
-      role: z.enum(['admin', 'staff']).default('staff')
+      role: z.enum(['admin', 'staff']).default('staff'),
+      password: z.string().optional()
     })
   }),
 

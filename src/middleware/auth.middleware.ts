@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { config } from '../config/config';
 import { Prisma } from '@prisma/client';
 
-// Initialize Supabase client
+// Initialize Supabase client with admin privileges
 const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY);
 
 // Define AuthRequest interface
@@ -42,6 +42,14 @@ export const authenticate = async (
   try {
     const authHeader = req.headers.authorization;
 
+    console.log('Authentication attempt:', {
+      path: req.path,
+      method: req.method,
+      hasAuthHeader: !!authHeader,
+      authHeaderStartsWithBearer: authHeader?.startsWith('Bearer '),
+      tokenLength: authHeader?.split(' ')[1]?.length || 0
+    });
+
     if (!authHeader?.startsWith('Bearer ')) {
       throw AppError.AuthenticationError('No token provided');
     }
@@ -51,12 +59,19 @@ export const authenticate = async (
     // Verify token with Supabase
     const { data: { user }, error } = await supabase.auth.getUser(token);
 
+    console.log('Supabase token verification:', {
+      hasUser: !!user,
+      userEmail: user?.email,
+      error: error?.message
+    });
+
     if (error || !user) {
+      logger.warn('Invalid token provided:', { error: error?.message });
       throw AppError.AuthenticationError('Invalid token');
     }
 
-    // Verify user still exists in our database
-    const dbUser = await prisma.user.findUnique({
+    // Verify user exists in our database
+    let dbUser = await prisma.user.findUnique({
       where: { supabase_id: user.id },
       select: {
         id: true,
@@ -67,8 +82,57 @@ export const authenticate = async (
       }
     });
 
+    // If user doesn't exist in our database but exists in Supabase, create them
     if (!dbUser) {
-      throw AppError.AuthenticationError('User no longer exists');
+      logger.info('User exists in Supabase but not in local database, creating...', { 
+        supabaseId: user.id,
+        email: user.email 
+      });
+
+      // Create a default business for the user
+      const business = await prisma.business.create({
+        data: {
+          name: `${user.email?.split('@')[0]}'s Business`,
+        },
+      });
+
+      // Create user in our database
+      dbUser = await prisma.user.create({
+        data: {
+          email: user.email || '',
+          name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+          role: user.user_metadata?.role || 'admin',
+          supabase_id: user.id,
+          businessId: business.id,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          businessId: true
+        }
+      });
+
+      // Update Supabase user metadata with business ID
+      try {
+        await supabase.auth.admin.updateUserById(user.id, {
+          user_metadata: {
+            ...user.user_metadata,
+            businessId: business.id,
+            role: dbUser.role
+          }
+        });
+        logger.info('Updated Supabase user metadata with business ID');
+      } catch (updateError) {
+        logger.warn('Failed to update Supabase user metadata:', updateError);
+      }
+
+      logger.info('User created in local database:', { 
+        userId: dbUser.id,
+        email: dbUser.email,
+        businessId: business.id 
+      });
     }
 
     // Attach user to request
@@ -89,6 +153,7 @@ export const authenticate = async (
 
     next();
   } catch (error) {
+    logger.error('Authentication error:', error);
     next(error);
   }
 };
@@ -126,6 +191,12 @@ export const validateBusinessAccess = (req: AuthRequest, _res: Response, next: N
     if (!requestedBusinessId) {
       throw AppError.ValidationError('Business ID is required');
     }
+
+    logger.info('Business access validation:', {
+      requestedBusinessId,
+      userBusinessId: req.user.businessId,
+      match: req.user.businessId === requestedBusinessId
+    });
 
     if (req.user.businessId !== requestedBusinessId) {
       throw AppError.AuthorizationError('You do not have access to this business');

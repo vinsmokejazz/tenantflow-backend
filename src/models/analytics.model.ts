@@ -160,15 +160,66 @@ export class AnalyticsModel {
 
   async getAggregatedMetrics(businessId: string, startDate: Date, endDate: Date): Promise<Metrics> {
     try {
-      const result = await this.prisma.$queryRaw`
-        SELECT get_aggregated_metrics(
-          ${businessId}::uuid,
-          ${startDate}::timestamp with time zone,
-          ${endDate}::timestamp with time zone
-        ) as metrics
-      `;
+      // Get all analytics data for the business in the date range
+      const analyticsData = await this.findByBusinessId(businessId, startDate, endDate);
       
-      return this.deserializeMetrics((result as any)[0].metrics);
+      if (analyticsData.length === 0) {
+        // Return default metrics if no data exists
+        return {
+          total_leads: 0,
+          active_leads: 0,
+          converted_leads: 0,
+          conversion_rate: 0,
+          total_revenue: 0,
+          average_deal_size: 0,
+          sales_by_stage: {},
+          customer_acquisition_cost: 0,
+          customer_lifetime_value: 0
+        };
+      }
+
+      // Aggregate metrics from all records
+      const aggregated = analyticsData.reduce((acc, data) => {
+        acc.total_leads += data.metrics.total_leads;
+        acc.active_leads += data.metrics.active_leads;
+        acc.converted_leads += data.metrics.converted_leads;
+        acc.total_revenue += data.metrics.total_revenue;
+        acc.customer_acquisition_cost += data.metrics.customer_acquisition_cost;
+        acc.customer_lifetime_value += data.metrics.customer_lifetime_value;
+        
+        // Aggregate sales by stage
+        Object.entries(data.metrics.sales_by_stage).forEach(([stage, value]) => {
+          acc.sales_by_stage[stage] = (acc.sales_by_stage[stage] || 0) + value;
+        });
+        
+        return acc;
+      }, {
+        total_leads: 0,
+        active_leads: 0,
+        converted_leads: 0,
+        conversion_rate: 0,
+        total_revenue: 0,
+        average_deal_size: 0,
+        sales_by_stage: {} as Record<string, number>,
+        customer_acquisition_cost: 0,
+        customer_lifetime_value: 0
+      });
+
+      // Calculate derived metrics
+      aggregated.conversion_rate = aggregated.total_leads > 0 
+        ? (aggregated.converted_leads / aggregated.total_leads) * 100 
+        : 0;
+      aggregated.average_deal_size = aggregated.converted_leads > 0 
+        ? aggregated.total_revenue / aggregated.converted_leads 
+        : 0;
+      aggregated.customer_acquisition_cost = analyticsData.length > 0 
+        ? aggregated.customer_acquisition_cost / analyticsData.length 
+        : 0;
+      aggregated.customer_lifetime_value = analyticsData.length > 0 
+        ? aggregated.customer_lifetime_value / analyticsData.length 
+        : 0;
+
+      return aggregated;
     } catch (error) {
       throw new AppError(500, 'Failed to get aggregated metrics');
     }

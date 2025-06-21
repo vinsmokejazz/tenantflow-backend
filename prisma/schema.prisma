@@ -12,34 +12,39 @@ datasource db {
 }
 
 model Business {
-  id           String     @id @default(uuid()) @db.Uuid
   name         String
-  subscription String     @default("free")
-  users        User[]
-  clients      Client[]
-  leads        Lead[]
-  followUps    FollowUp[]
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+  subscription String      @default("free")
+  id           String      @id @default(uuid()) @db.Uuid
   analytics    Analytics[]
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
+  clients      Client[]
+  deals        Deal[]
+  followUps    FollowUp[]
+  leads        Lead[]
+  users        User[]
+  reports      Report[]
 
   @@map("businesses")
   @@schema("public")
 }
 
 model User {
-  id                String    @id @default(uuid()) @db.Uuid
-  supabase_id       String    @unique @db.Uuid
   email             String    @unique
-  password          String?   // Optional since Supabase handles auth
-  name              String
   role              String    @default("staff")
-  business          Business  @relation(fields: [businessId], references: [id])
-  businessId        String    @map("business_id") @db.Uuid
-  resetToken        String?
-  resetTokenExpires DateTime?
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
+  businessId        String    @map("business_id") @db.Uuid
+  name              String
+  password          String?
+  resetToken        String?
+  resetTokenExpires DateTime?
+  supabase_id       String    @unique @db.Uuid
+  id                String    @id @default(uuid()) @db.Uuid
+  business          Business  @relation(fields: [businessId], references: [id])
+  assignedLeads     Lead[]
+  assignedFollowUps FollowUp[]
+  assignedDeals     Deal[]
 
   @@index([businessId])
   @@map("users")
@@ -47,16 +52,17 @@ model User {
 }
 
 model Client {
-  id         String     @id @default(uuid()) @db.Uuid
   name       String
   email      String?
   phone      String?
-  business   Business   @relation(fields: [businessId], references: [id])
-  businessId String     @map("business_id") @db.Uuid
-  leads      Lead[]
-  followUps  FollowUp[]
   createdAt  DateTime   @default(now()) @map("created_at")
   updatedAt  DateTime   @updatedAt @map("updated_at")
+  businessId String     @map("business_id") @db.Uuid
+  id         String     @id @default(uuid()) @db.Uuid
+  business   Business   @relation(fields: [businessId], references: [id])
+  deals      Deal[]
+  followUps  FollowUp[]
+  leads      Lead[]
 
   @@index([businessId])
   @@map("clients")
@@ -64,49 +70,97 @@ model Client {
 }
 
 model Lead {
-  id         String   @id @default(uuid()) @db.Uuid
   status     String   @default("new")
   notes      String?
-  client     Client   @relation(fields: [clientId], references: [id])
-  clientId   String   @db.Uuid
-  business   Business @relation(fields: [businessId], references: [id])
-  businessId String   @map("business_id") @db.Uuid
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
+  businessId String   @map("business_id") @db.Uuid
+  id         String   @id @default(uuid()) @db.Uuid
+  clientId   String   @db.Uuid
+  assignedTo String?  @db.Uuid
+  deals      Deal[]
+  business   Business @relation(fields: [businessId], references: [id])
+  client     Client   @relation(fields: [clientId], references: [id])
+  assignedUser User?  @relation(fields: [assignedTo], references: [id])
 
   @@index([businessId, clientId])
+  @@index([assignedTo])
   @@map("leads")
   @@schema("public")
 }
 
 model FollowUp {
-  id         String   @id @default(uuid()) @db.Uuid
   notes      String
   dueDate    DateTime
   completed  Boolean  @default(false)
-  client     Client   @relation(fields: [clientId], references: [id])
-  clientId   String   @db.Uuid
-  business   Business @relation(fields: [businessId], references: [id])
-  businessId String   @map("business_id") @db.Uuid
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
+  businessId String   @map("business_id") @db.Uuid
+  id         String   @id @default(uuid()) @db.Uuid
+  clientId   String   @db.Uuid
+  assignedTo String?  @db.Uuid
+  business   Business @relation(fields: [businessId], references: [id])
+  client     Client   @relation(fields: [clientId], references: [id])
+  assignedUser User?  @relation(fields: [assignedTo], references: [id])
 
   @@index([businessId, clientId])
+  @@index([assignedTo])
   @@map("follow_ups")
+  @@schema("public")
+}
+
+model Deal {
+  id                String    @id @default(uuid()) @db.Uuid
+  title             String
+  value             Float
+  stage             String    @default("prospecting")
+  description       String?
+  expectedCloseDate DateTime?
+  clientId          String?   @db.Uuid
+  leadId            String?   @db.Uuid
+  assignedTo        String?   @db.Uuid
+  businessId        String    @map("business_id") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  business          Business  @relation(fields: [businessId], references: [id])
+  client            Client?   @relation(fields: [clientId], references: [id])
+  lead              Lead?     @relation(fields: [leadId], references: [id])
+  assignedUser      User?     @relation(fields: [assignedTo], references: [id])
+
+  @@index([businessId, clientId])
+  @@index([assignedTo])
+  @@map("deals")
   @@schema("public")
 }
 
 model Analytics {
   id         String   @id @default(uuid()) @db.Uuid
-  business   Business @relation(fields: [businessId], references: [id])
   businessId String   @map("business_id") @db.Uuid
   date       DateTime
   metrics    Json
   aiInsights Json?
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
+  business   Business @relation(fields: [businessId], references: [id])
 
   @@index([businessId, date])
   @@map("analytics")
+  @@schema("public")
+}
+
+model Report {
+  id         String   @id @default(uuid()) @db.Uuid
+  name       String
+  type       String   // sales, leads, clients, followups, custom
+  data       Json     // Report data in JSON format
+  filters    Json?    // Optional filters applied to the report
+  dateRange  Json?    // Optional date range for the report
+  businessId String   @map("business_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  business   Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId])
+  @@map("reports")
   @@schema("public")
 }

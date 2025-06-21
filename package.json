@@ -7,6 +7,9 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "setup": "node setup.js",
+    "migrate": "node scripts/migrate.js",
+    "test:auth": "node test-auth.js",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\"",
@@ -32,6 +35,7 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "jwt-decode": "^4.0.0",
+    "node-fetch": "^2.7.0",
     "openai": "^4.28.0",
     "winston": "^3.11.0",
     "zod": "^3.22.4"

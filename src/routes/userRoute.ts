@@ -23,6 +23,31 @@ const userRouter = express.Router();
 userRouter.use(cors());
 userRouter.use(authenticate);
 
+// GET current user
+userRouter.get('/me', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user) throw AppError.AuthenticationError('Unauthorized');
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        businessId: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    if (!user) throw AppError.NotFoundError('User not found');
+    res.json(user);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET all users
 userRouter.get('/', requireAdmin, validateRequest(userValidation.getUsers), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
@@ -81,12 +106,65 @@ userRouter.get('/:id', requireAdmin, validateRequest(userValidation.getUser), as
 userRouter.post('/', requireAdmin, validateRequest(userValidation.createUser), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.user) throw AppError.AuthenticationError('Unauthorized');
-    const { email, password, name, role } = req.body;
+    const { email, name, role } = req.body;
 
-    // Supabase user creation
+    // Check if user already exists in our database
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        email,
+        businessId: req.user.businessId
+      }
+    });
+
+    if (existingUser) {
+      throw AppError.ConflictError('User with this email already exists in your business');
+    }
+
+    // Check if user exists in Supabase
+    const { data: supabaseUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+    
+    if (listError) {
+      throw AppError.ValidationError('Failed to check existing users: ' + listError.message);
+    }
+
+    const existingSupabaseUser = supabaseUsers.users.find(user => user.email === email);
+    
+    if (existingSupabaseUser) {
+      // User exists in Supabase but not in our database
+      // Create them in our database and link to existing Supabase account
+      const user = await prisma.user.create({
+        data: {
+          email,
+          name,
+          role,
+          supabase_id: existingSupabaseUser.id,
+          business: {
+            connect: { id: req.user.businessId }
+          }
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          createdAt: true,
+          updatedAt: true
+        }
+      });
+
+      console.log(`User linked to existing Supabase account: ${email} for role ${role}`);
+
+      res.status(201).json({
+        ...user,
+        message: `User account linked for ${email}`
+      });
+      return;
+    }
+
+    // User doesn't exist in either place, create new user
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
-      password,
+      email_confirm: true, // Auto-confirm email
       user_metadata: {
         name,
         role,
@@ -98,6 +176,7 @@ userRouter.post('/', requireAdmin, validateRequest(userValidation.createUser), a
       throw AppError.ValidationError('Supabase user creation failed: ' + error?.message);
     }
 
+    // Create user in our database
     const user = await prisma.user.create({
       data: {
         email,
@@ -118,7 +197,14 @@ userRouter.post('/', requireAdmin, validateRequest(userValidation.createUser), a
       }
     });
 
-    res.status(201).json(user);
+    // Send invitation email (in a real implementation, you would send an actual email)
+    // For now, we'll just log it
+    console.log(`Invitation sent to ${email} for role ${role}`);
+
+    res.status(201).json({
+      ...user,
+      message: `Invitation sent to ${email}`
+    });
   } catch (error) {
     next(error);
   }
@@ -181,6 +267,78 @@ userRouter.delete('/:id', requireAdmin, validateRequest(userValidation.deleteUse
 
     await prisma.user.delete({ where: { id } });
     res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET audit log
+userRouter.get('/audit-log', requireAdmin, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user) throw AppError.AuthenticationError('Unauthorized');
+
+    // Get all users with their activity
+    const users = await prisma.user.findMany({
+      where: {
+        businessId: req.user.businessId
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    // Generate audit log entries
+    const auditLog = users.map(user => ({
+      id: user.id,
+      action: 'user_created',
+      userId: user.id,
+      userEmail: user.email,
+      userName: user.name,
+      userRole: user.role,
+      timestamp: user.createdAt,
+      details: `User ${user.name} (${user.email}) was created with role ${user.role}`
+    }));
+
+    res.json({
+      auditLog,
+      totalEntries: auditLog.length,
+      lastUpdated: new Date().toISOString()
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST resend invite
+userRouter.post('/:id/resend-invite', requireAdmin, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user) throw AppError.AuthenticationError('Unauthorized');
+    const { id } = req.params;
+
+    const user = await prisma.user.findFirst({
+      where: {
+        id,
+        businessId: req.user.businessId
+      }
+    });
+
+    if (!user) throw AppError.NotFoundError('User not found');
+
+    // In a real implementation, you would send an email invite here
+    // For now, we'll just return a success message
+    res.json({
+      message: 'Invite resent successfully',
+      userId: id,
+      email: user.email
+    });
   } catch (error) {
     next(error);
   }

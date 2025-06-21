@@ -20,7 +20,7 @@ A modern CRM SaaS backend built with Node.js, TypeScript, Express, Prisma, and S
 - **Framework**: Express.js
 - **Database**: PostgreSQL (via Supabase)
 - **ORM**: Prisma
-- **Authentication**: JWT
+- **Authentication**: Supabase Auth
 - **AI Integration**: OpenAI
 - **Validation**: Zod
 - **Testing**: Jest
@@ -28,7 +28,7 @@ A modern CRM SaaS backend built with Node.js, TypeScript, Express, Prisma, and S
 ## Prerequisites
 
 - Node.js v18 or higher
-- PostgreSQL database
+- PostgreSQL database (Supabase recommended)
 - Supabase account
 - OpenAI API key
 
@@ -47,9 +47,28 @@ A modern CRM SaaS backend built with Node.js, TypeScript, Express, Prisma, and S
 
 3. Set up environment variables:
    ```bash
-   cp .env.example .env
+   cp env.example .env
    ```
-   Edit `.env` with your configuration.
+   Edit `.env` with your configuration:
+   ```env
+   NODE_ENV=development
+   PORT=3001
+   
+   # Database Configuration
+   DATABASE_URL="postgresql://username:password@localhost:5432/tenantflow?schema=public"
+   DIRECT_URL="postgresql://username:password@localhost:5432/tenantflow?schema=public"
+   
+   # CORS Configuration
+   CORS_ORIGIN=http://localhost:3000
+   
+   # Supabase Configuration
+   SUPABASE_URL=https://your-project.supabase.co
+   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+   SUPABASE_ANON_KEY=your-anon-key
+   
+   # OpenAI Configuration
+   OPENAI_API_KEY=your-openai-api-key
+   ```
 
 4. Set up the database:
    ```bash
@@ -61,6 +80,30 @@ A modern CRM SaaS backend built with Node.js, TypeScript, Express, Prisma, and S
    ```bash
    npm run dev
    ```
+
+## Troubleshooting
+
+### "User no longer exists" Error
+This error occurs when:
+1. User exists in Supabase but not in your local database
+2. Database connection issues
+3. Missing environment variables
+
+**Solutions:**
+- Ensure all environment variables are set correctly
+- Run database migrations: `npm run prisma:migrate`
+- Check database connection
+- Verify Supabase configuration
+
+### Authentication Issues
+- Ensure Supabase service role key is correct
+- Check CORS configuration matches frontend URL
+- Verify database schema matches Prisma schema
+
+### Database Connection Issues
+- Check DATABASE_URL and DIRECT_URL in .env
+- Ensure PostgreSQL is running
+- Verify database exists and is accessible
 
 ## Available Scripts
 
@@ -77,7 +120,14 @@ A modern CRM SaaS backend built with Node.js, TypeScript, Express, Prisma, and S
 
 ## API Documentation
 
-API documentation is available at `/api-docs` when running the server.
+### Authentication Endpoints
+- `POST /api/v1/auth/register` - Register new user
+- `POST /api/v1/auth/login` - Login user
+- `POST /api/v1/auth/forgot-password` - Request password reset
+- `POST /api/v1/auth/reset-password/:token` - Reset password
+
+### Protected Endpoints
+All other endpoints require authentication via Bearer token.
 
 ## Project Structure
 

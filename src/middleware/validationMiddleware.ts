@@ -38,11 +38,11 @@ export const validateRequest = (schema: AnyZodObject) => {
           code: err.code
         }));
 
-        logger.warn('Validation error:', {
+        console.warn('Validation error:', JSON.stringify({
           path: req.path,
           method: req.method,
           errors: validationErrors,
-        });
+        }, null, 2));
 
         res.status(400).json({
           status: 'fail',

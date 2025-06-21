@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { supabaseAdmin } from "../config/supabase";
 import { AppError } from '../utils/error';
-import { prisma } from '../lib/prisma';
+import { prisma } from '../config/prisma';
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../config/config';
 import { logger } from '../utils/logger';
@@ -23,31 +23,40 @@ const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_
 
 export const register = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    console.log('Starting registration');
+    logger.info('Starting registration process');
     const { email, password, name, business_name } = req.body;
 
-    console.log('Attempting Supabase signup...');
+    // Check if user already exists in our database
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (existingUser) {
+      throw AppError.ConflictError('User with this email already exists');
+    }
+
+    logger.info('Attempting Supabase signup...');
     // Create user in Supabase
     const { data: { user }, error: supabaseError } = await supabase.auth.signUp({
       email,
       password,
     });
-    console.log('Supabase signup result:', { user, supabaseError });
 
     if (supabaseError || !user) {
+      logger.error('Supabase signup failed:', supabaseError);
       throw AppError.ValidationError(supabaseError?.message || 'Failed to create user');
     }
 
-    console.log('Attempting business creation...');
+    logger.info('Supabase user created:', { supabaseId: user.id });
+
     // Create business
     const business = await prisma.business.create({
       data: {
         name: business_name,
       },
     });
-    console.log('Business created:', business);
+    logger.info('Business created:', { businessId: business.id });
 
-    console.log('Attempting DB user creation...');
     // Create user in our database
     const dbUser = await prisma.user.create({
       data: {
@@ -58,9 +67,9 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         businessId: business.id,
       },
     });
-    console.log('DB user created:', dbUser);
+    logger.info('Database user created:', { userId: dbUser.id });
 
-    logger.info('User registered:', {
+    logger.info('User registration completed successfully:', {
       userId: dbUser.id,
       email: dbUser.email,
       businessId: business.id,
@@ -77,10 +86,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       },
     });
   } catch (error) {
-    console.error('Registration error:', error);
-    if (error instanceof Error) {
-      console.error('Stack trace:', error.stack);
-    }
+    logger.error('Registration error:', error);
     next(error);
   }
 };
@@ -89,6 +95,8 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
   try {
     const { email, password } = req.body;
 
+    logger.info('Login attempt:', { email });
+
     // Authenticate with Supabase
     const { data: { session }, error: supabaseError } = await supabase.auth.signInWithPassword({
       email,
@@ -96,11 +104,12 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     });
 
     if (supabaseError || !session) {
+      logger.warn('Login failed - Supabase auth error:', { email, error: supabaseError?.message });
       throw AppError.AuthenticationError(supabaseError?.message || 'Invalid credentials');
     }
 
     // Get user from our database
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { supabase_id: session.user.id },
       select: {
         id: true,
@@ -111,11 +120,46 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       },
     });
 
+    // If user doesn't exist in our database but exists in Supabase, create them
     if (!user) {
-      throw AppError.AuthenticationError('User not found');
+      logger.info('User exists in Supabase but not in local database, creating...', { 
+        supabaseId: session.user.id,
+        email: session.user.email 
+      });
+
+      // Create a default business for the user
+      const business = await prisma.business.create({
+        data: {
+          name: `${session.user.email?.split('@')[0]}'s Business`,
+        },
+      });
+
+      // Create user in our database
+      user = await prisma.user.create({
+        data: {
+          email: session.user.email || email,
+          name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
+          role: session.user.user_metadata?.role || 'admin',
+          supabase_id: session.user.id,
+          businessId: business.id,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          businessId: true,
+        },
+      });
+
+      logger.info('User created in local database:', { 
+        userId: user.id,
+        email: user.email,
+        businessId: business.id 
+      });
     }
 
-    logger.info('User logged in:', {
+    logger.info('User logged in successfully:', {
       userId: user.id,
       email: user.email,
     });
@@ -135,6 +179,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       },
     });
   } catch (error) {
+    logger.error('Login error:', error);
     next(error);
   }
 };
@@ -434,4 +479,65 @@ export const checkClientLimit = async (businessId: string): Promise<boolean> => 
   });
   
   return clientCount < FREE_TIER_CLIENT_LIMIT;
+};
+
+export const syncSupabaseUsers = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    logger.info('Starting Supabase user sync...');
+
+    // Get all users from Supabase
+    const { data: { users }, error } = await supabase.auth.admin.listUsers();
+    
+    if (error) {
+      throw AppError.InternalError('Failed to fetch Supabase users');
+    }
+
+    let syncedCount = 0;
+    let skippedCount = 0;
+
+    for (const supabaseUser of users) {
+      // Check if user already exists in our database
+      const existingUser = await prisma.user.findUnique({
+        where: { supabase_id: supabaseUser.id }
+      });
+
+      if (existingUser) {
+        skippedCount++;
+        continue;
+      }
+
+      // Create a default business for the user
+      const business = await prisma.business.create({
+        data: {
+          name: `${supabaseUser.email?.split('@')[0]}'s Business`,
+        },
+      });
+
+      // Create user in our database
+      await prisma.user.create({
+        data: {
+          email: supabaseUser.email || '',
+          name: supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'User',
+          role: supabaseUser.user_metadata?.role || 'admin',
+          supabase_id: supabaseUser.id,
+          businessId: business.id,
+        },
+      });
+
+      syncedCount++;
+      logger.info('Synced user:', { email: supabaseUser.email, supabaseId: supabaseUser.id });
+    }
+
+    logger.info('Supabase user sync completed:', { synced: syncedCount, skipped: skippedCount });
+
+    res.json({
+      message: 'User sync completed',
+      synced: syncedCount,
+      skipped: skippedCount,
+      total: users.length
+    });
+  } catch (error) {
+    logger.error('User sync error:', error);
+    next(error);
+  }
 };

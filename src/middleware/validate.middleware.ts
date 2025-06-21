@@ -17,9 +17,20 @@ export const validate = (schema: AnyZodObject) => {
         logger.warn('Validation error:', {
           path: req.path,
           method: req.method,
-          errors: error.errors,
+          body: req.body,
+          errors: error.errors.map(err => ({
+            field: err.path.join('.'),
+            message: err.message,
+            code: err.code
+          })),
         });
-        next(AppError.ValidationError('Validation error'));
+        
+        // Create a more descriptive error message
+        const errorMessages = error.errors.map(err => 
+          `${err.path.join('.')}: ${err.message}`
+        ).join(', ');
+        
+        next(AppError.ValidationError(`Validation failed: ${errorMessages}`));
         return;
       }
       next(error);

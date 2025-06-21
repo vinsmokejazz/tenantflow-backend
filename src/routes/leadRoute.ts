@@ -18,10 +18,28 @@ leadRouter.use(authenticate);
 // GET all leads
 leadRouter.get('/', validateRequest(leadValidation.getLeads), async (req: Request, res: Response, next: NextFunction) => {
   const businessId = req.user?.businessId;
-  
+  const userId = req.user?.id;
+  const userRole = req.user?.role;
   try {
+    const where: any = { businessId };
+    if (userRole === 'staff') {
+      where.assignedTo = userId;
+    }
     const leads = await prisma.lead.findMany({
-      where: { businessId }
+      where,
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        assignedUser: {
+          select: { id: true, name: true, email: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
     });
     res.json(leads);
   } catch (error) {
@@ -33,20 +51,33 @@ leadRouter.get('/', validateRequest(leadValidation.getLeads), async (req: Reques
 leadRouter.get('/:id', validateRequest(leadValidation.getLead), async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
   const businessId = req.user?.businessId;
-
+  const userId = req.user?.id;
+  const userRole = req.user?.role;
   try {
+    const where: any = { id, businessId };
+    if (userRole === 'staff') {
+      where.assignedTo = userId;
+    }
     const lead = await prisma.lead.findFirst({
-      where: { 
-        id,
-        businessId
+      where,
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true
+          }
+        },
+        assignedUser: {
+          select: { id: true, name: true, email: true }
+        }
       }
     });
-    
     if (!lead) {
       next(AppError.NotFoundError('Lead not found'));
       return;
     }
-    
     res.json(lead);
   } catch (error) {
     next(error);
@@ -55,22 +86,28 @@ leadRouter.get('/:id', validateRequest(leadValidation.getLead), async (req: Requ
 
 // POST new lead
 leadRouter.post('/', validateRequest(leadValidation.createLead), async (req: Request, res: Response, next: NextFunction) => {
-  const { status, notes, clientId } = req.body;
+  const { status, notes, clientId, assignedTo } = req.body;
   const businessId = req.user?.businessId;
-
+  const userId = req.user?.id;
+  const userRole = req.user?.role;
   if (!businessId) {
     next(AppError.AuthorizationError('Unauthorized: missing business ID'));
     return;
   }
-
   try {
+    const data: any = { status, notes, clientId, businessId };
+    // Only admin can assign to others; staff can only assign to self
+    if (userRole === 'admin' && assignedTo) {
+      data.assignedTo = assignedTo;
+    } else if (userRole === 'staff') {
+      data.assignedTo = userId;
+    }
     const lead = await prisma.lead.create({
-      data: { 
-        status, 
-        notes, 
-        clientId, 
-        businessId 
-      },
+      data,
+      include: {
+        client: { select: { id: true, name: true, email: true } },
+        assignedUser: { select: { id: true, name: true, email: true } }
+      }
     });
     res.status(201).json(lead);
   } catch (error) {
@@ -78,53 +115,61 @@ leadRouter.post('/', validateRequest(leadValidation.createLead), async (req: Req
   }
 });
 
-// PUT update lead - admin only
-leadRouter.put('/:id', requireAdmin, validateRequest(leadValidation.updateLead), async (req: Request, res: Response, next: NextFunction) => {
+// PUT update lead
+leadRouter.put('/:id', validateRequest(leadValidation.updateLead), async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
-  const { status, notes } = req.body;
+  const { status, notes, assignedTo } = req.body;
   const businessId = req.user?.businessId;
-
+  const userId = req.user?.id;
+  const userRole = req.user?.role;
   try {
-    const lead = await prisma.lead.updateMany({
-      where: { 
-        id,
-        businessId
-      },
-      data: { 
-        status, 
-        notes 
-      }
-    });
-
-    if (lead.count === 0) {
+    // Only allow update if admin or assigned staff
+    const where: any = { id, businessId };
+    if (userRole === 'staff') {
+      where.assignedTo = userId;
+    }
+    const existingLead = await prisma.lead.findFirst({ where });
+    if (!existingLead) {
       next(AppError.NotFoundError('Lead not found or not authorized'));
       return;
     }
-
-    res.json({ message: 'Lead updated successfully' });
+    const updateData: any = { status, notes };
+    // Only admin can reassign
+    if (userRole === 'admin' && assignedTo) {
+      updateData.assignedTo = assignedTo;
+    }
+    const updatedLead = await prisma.lead.update({
+      where: { id },
+      data: updateData,
+      include: {
+        client: { select: { id: true, name: true, email: true } },
+        assignedUser: { select: { id: true, name: true, email: true } }
+      }
+    });
+    res.json(updatedLead);
   } catch (error) {
     next(error);
   }
 });
 
-// DELETE lead - admin only
-leadRouter.delete('/:id', requireAdmin, validateRequest(leadValidation.deleteLead), async (req: Request, res: Response, next: NextFunction) => {
+// DELETE lead
+leadRouter.delete('/:id', validateRequest(leadValidation.deleteLead), async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
   const businessId = req.user?.businessId;
-
+  const userId = req.user?.id;
+  const userRole = req.user?.role;
   try {
-    const deleted = await prisma.lead.deleteMany({
-      where: { 
-        id,
-        businessId
-      }
-    });
-
-    if (deleted.count === 0) {
+    // Only allow delete if admin or assigned staff
+    const where: any = { id, businessId };
+    if (userRole === 'staff') {
+      where.assignedTo = userId;
+    }
+    const existingLead = await prisma.lead.findFirst({ where });
+    if (!existingLead) {
       next(AppError.NotFoundError('Lead not found or not authorized'));
       return;
     }
-
+    await prisma.lead.delete({ where: { id } });
     res.status(204).send();
   } catch (error) {
     next(error);

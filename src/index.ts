@@ -6,7 +6,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
 import { logger } from './utils/logger';
 import { config } from './config/config';
-import prisma from './config/database';
+import { prisma } from './config/prisma';
 
 // Route imports
 import authRouter from './routes/authRoute';
@@ -16,6 +16,9 @@ import userRouter from './routes/userRoute';
 import followUpRouter from './routes/followUpRoute';
 import leadRouter from './routes/leadRoute';
 import analyticsRouter from './routes/analyticsRoute';
+import dealRouter from './routes/dealRoute';
+import reportRouter from './routes/reportRoute';
+import aiInsightsRouter from './routes/aiInsightsRoute';
 
 // Create Express app
 export const app: Express = express();
@@ -62,6 +65,9 @@ app.use(`/api/${API_VERSION}/user`, userRouter);
 app.use(`/api/${API_VERSION}/followUp`, followUpRouter);
 app.use(`/api/${API_VERSION}/leads`, leadRouter);
 app.use(`/api/${API_VERSION}/analytics`, analyticsRouter);
+app.use(`/api/${API_VERSION}/deals`, dealRouter);
+app.use(`/api/${API_VERSION}/reports`, reportRouter);
+app.use(`/api/${API_VERSION}/ai-insights`, aiInsightsRouter);
 
 // Health check endpoint
 app.get('/health', (_req, res) => {
