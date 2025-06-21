@@ -199,7 +199,7 @@ async function generatePerformanceInsights(businessId: string) {
 }
 
 // Generate recommendations
-function generateRecommendations(businessId: string) {
+function generateRecommendations(_businessId: string) {
   return [
     {
       category: 'Lead Management',

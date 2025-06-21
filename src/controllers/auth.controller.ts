@@ -473,12 +473,57 @@ export const signupStaff = async (req: AuthRequest, res: Response, next: NextFun
   }
 };
 
-export const checkClientLimit = async (businessId: string): Promise<boolean> => {
-  const clientCount = await prisma.client.count({
-    where: { businessId }
-  });
-  
-  return clientCount < FREE_TIER_CLIENT_LIMIT;
+export const checkClientLimit = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const businessId = req.user?.businessId;
+    if (!businessId) {
+      return res.status(401).json({ error: 'Business ID not found' });
+    }
+
+    // Get business subscription info
+    const business = await prisma.business.findUnique({
+      where: { id: businessId },
+      select: { subscription: true }
+    });
+
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+
+    // Get current client count
+    const clientCount = await prisma.client.count({
+      where: { businessId }
+    });
+
+    // Define limits based on subscription
+    const limits = {
+      free: 10,
+      pro: 100,
+      enterprise: 1000
+    };
+
+    const limit = limits[business.subscription as keyof typeof limits] || limits.free;
+    const canAddMore = clientCount < limit;
+    const remainingSlots = Math.max(0, limit - clientCount);
+    const usagePercentage = Math.round((clientCount / limit) * 100);
+
+    // Add limit info to request for use in routes
+    req.clientLimitInfo = {
+      currentCount: clientCount,
+      limit,
+      subscription: business.subscription,
+      canAddMore,
+      remainingSlots,
+      usagePercentage,
+      isApproachingLimit: usagePercentage >= 80,
+      isAtLimit: !canAddMore
+    };
+
+    next();
+  } catch (error) {
+    console.error('Error checking client limit:', error);
+    next(error);
+  }
 };
 
 export const syncSupabaseUsers = async (req: Request, res: Response, next: NextFunction) => {

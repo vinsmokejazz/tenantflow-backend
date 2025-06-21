@@ -113,8 +113,8 @@ dealRouter.post('/', async (req: Request, res: Response, next: NextFunction) => 
       description: validDescription,
       businessId
     };
-    if (userRole === 'admin' && assignedTo) {
-      data.assignedTo = assignedTo;
+    if (userRole === 'admin') {
+      data.assignedTo = assignedTo || null;
     } else if (userRole === 'staff') {
       data.assignedTo = userId;
     }
@@ -156,8 +156,8 @@ dealRouter.put('/:id', async (req: Request, res: Response, next: NextFunction) =
       expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : undefined,
       description
     };
-    if (userRole === 'admin' && assignedTo) {
-      updateData.assignedTo = assignedTo;
+    if (userRole === 'admin') {
+      updateData.assignedTo = assignedTo || null;
     }
     const updated = await prisma.deal.update({
       where: { id },

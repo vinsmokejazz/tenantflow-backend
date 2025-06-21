@@ -6,6 +6,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
 import { logger } from './utils/logger';
 import { config } from './config/config';
+import { getRateLimitConfig } from './config/rateLimit';
 import { prisma } from './config/prisma';
 
 // Route imports
@@ -36,15 +37,15 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// Rate limiting
+// Rate limiting - environment-specific configuration
+const rateLimitConfig = getRateLimitConfig();
 const limiter = rateLimit({
-  windowMs: config.RATE_LIMIT_WINDOW_MS,
-  max: config.RATE_LIMIT_MAX,
-  message: 'Too many requests from this IP, please try again later.',
+  ...rateLimitConfig,
   handler: (req, res) => {
     logger.warn(`Rate limit exceeded for IP: ${req.ip}`);
     res.status(429).json({
       error: 'Too many requests from this IP, please try again later.',
+      retryAfter: Math.ceil(rateLimitConfig.windowMs / 1000), // seconds
     });
   },
 });
@@ -62,7 +63,7 @@ app.use(`/api/${API_VERSION}/auth`, authRouter);
 app.use(`/api/${API_VERSION}/clients`, clientRouter);
 app.use(`/api/${API_VERSION}/business`, businessRouter);
 app.use(`/api/${API_VERSION}/user`, userRouter);
-app.use(`/api/${API_VERSION}/followUp`, followUpRouter);
+app.use(`/api/${API_VERSION}/follow-ups`, followUpRouter);
 app.use(`/api/${API_VERSION}/leads`, leadRouter);
 app.use(`/api/${API_VERSION}/analytics`, analyticsRouter);
 app.use(`/api/${API_VERSION}/deals`, dealRouter);

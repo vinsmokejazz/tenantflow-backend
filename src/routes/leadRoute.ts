@@ -96,12 +96,13 @@ leadRouter.post('/', validateRequest(leadValidation.createLead), async (req: Req
   }
   try {
     const data: any = { status, notes, clientId, businessId };
-    // Only admin can assign to others; staff can only assign to self
-    if (userRole === 'admin' && assignedTo) {
-      data.assignedTo = assignedTo;
+    // Only admin can assign to others or unassign; staff can only assign to self
+    if (userRole === 'admin') {
+      data.assignedTo = assignedTo || null;
     } else if (userRole === 'staff') {
       data.assignedTo = userId;
     }
+    console.log('LEAD CREATE: data =', data);
     const lead = await prisma.lead.create({
       data,
       include: {
@@ -109,6 +110,7 @@ leadRouter.post('/', validateRequest(leadValidation.createLead), async (req: Req
         assignedUser: { select: { id: true, name: true, email: true } }
       }
     });
+    console.log('LEAD CREATE: lead =', lead);
     res.status(201).json(lead);
   } catch (error) {
     next(error);
@@ -134,10 +136,11 @@ leadRouter.put('/:id', validateRequest(leadValidation.updateLead), async (req: R
       return;
     }
     const updateData: any = { status, notes };
-    // Only admin can reassign
-    if (userRole === 'admin' && assignedTo) {
-      updateData.assignedTo = assignedTo;
+    // Only admin can reassign or unassign
+    if (userRole === 'admin') {
+      updateData.assignedTo = assignedTo || null;
     }
+    console.log('LEAD UPDATE: updateData =', updateData);
     const updatedLead = await prisma.lead.update({
       where: { id },
       data: updateData,
@@ -146,6 +149,7 @@ leadRouter.put('/:id', validateRequest(leadValidation.updateLead), async (req: R
         assignedUser: { select: { id: true, name: true, email: true } }
       }
     });
+    console.log('LEAD UPDATE: updatedLead =', updatedLead);
     res.json(updatedLead);
   } catch (error) {
     next(error);

@@ -11,8 +11,8 @@ const envSchema = z.object({
   DATABASE_URL: z.string(),
   DIRECT_URL: z.string(),
   CORS_ORIGIN: z.string().default('*'),
-  RATE_LIMIT_WINDOW_MS: z.string().default('900000'), // 15 minutes
-  RATE_LIMIT_MAX: z.string().default('100'),
+  RATE_LIMIT_WINDOW_MS: z.string().default('60000'), // 1 minute for development
+  RATE_LIMIT_MAX: z.string().default('1000'), // 1000 requests per minute for development
   SUPABASE_URL: z.string(),
   SUPABASE_SERVICE_ROLE_KEY: z.string(),
   OPENAI_API_KEY: z.string(),

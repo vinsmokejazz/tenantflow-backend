@@ -78,8 +78,9 @@ followUpRouter.post('/', validateRequest(followUpValidation.createFollowUp), asy
   }
   try {
     const data: any = { notes, dueDate, clientId, businessId };
-    if (userRole === 'admin' && assignedTo) {
-      data.assignedTo = assignedTo;
+    if (userRole === 'admin') {
+      // Admin can assign or unassign (set to null)
+      data.assignedTo = assignedTo || null;
     } else if (userRole === 'staff') {
       data.assignedTo = userId;
     }
@@ -114,8 +115,9 @@ followUpRouter.put('/:id', validateRequest(followUpValidation.updateFollowUp), a
       return;
     }
     const updateData: any = { notes, dueDate, completed };
-    if (userRole === 'admin' && assignedTo) {
-      updateData.assignedTo = assignedTo;
+    if (userRole === 'admin') {
+      // Admin can assign or unassign (set to null)
+      updateData.assignedTo = assignedTo || null;
     }
     const updated = await prisma.followUp.update({
       where: { id },
@@ -149,6 +151,50 @@ followUpRouter.delete('/:id', validateRequest(followUpValidation.deleteFollowUp)
     }
     await prisma.followUp.delete({ where: { id } });
     res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET upcoming tasks for dashboard
+followUpRouter.get('/dashboard/tasks', async (req: Request, res: Response, next: NextFunction) => {
+  const businessId = req.user?.businessId;
+  const userId = req.user?.id;
+  const userRole = req.user?.role;
+  
+  try {
+    const where: any = { businessId };
+    if (userRole === 'staff') {
+      where.assignedTo = userId;
+    }
+
+    const followUps = await prisma.followUp.findMany({
+      where,
+      include: {
+        client: {
+          select: { id: true, name: true, email: true }
+        },
+        assignedUser: {
+          select: { id: true, name: true, email: true }
+        }
+      },
+      orderBy: { dueDate: 'asc' }
+    });
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const overdue = followUps.filter(f => !f.completed && f.dueDate < today);
+    const upcoming = followUps.filter(f => 
+      !f.completed && f.dueDate >= today && f.dueDate <= nextWeek
+    );
+
+    res.json({
+      overdue,
+      upcoming,
+      total: followUps.length
+    });
   } catch (error) {
     next(error);
   }

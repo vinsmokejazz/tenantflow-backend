@@ -94,7 +94,7 @@ reportRouter.post('/', async (req: Request, res: Response, next: NextFunction) =
 // PUT update report
 reportRouter.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
-  const { name, type, date } = req.body;
+  const { name, type } = req.body;
   const businessId = req.user?.businessId;
 
   if (!businessId) {
