@@ -7,6 +7,8 @@ import { userValidation } from '../validations/user.validation';
 import { AppError } from '../utils/error';
 import { prisma } from '../config/prisma';
 import { supabaseAdmin } from '../config/supabase';
+import crypto from 'crypto';
+import { emailService } from '../services/email.service';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -161,14 +163,20 @@ userRouter.post('/', requireAdmin, validateRequest(userValidation.createUser), a
       return;
     }
 
+    // Generate a secure temporary password for the invited user
+    const tempPassword = crypto.randomBytes(12).toString('hex') + 'A1!'; // Ensures complexity requirements
+    
     // User doesn't exist in either place, create new user
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
+      password: tempPassword, // Set the temporary password
       email_confirm: true, // Auto-confirm email
       user_metadata: {
         name,
         role,
-        business_id: req.user.businessId
+        business_id: req.user.businessId,
+        temp_password: true, // Flag to indicate this is a temporary password
+        invited_by: req.user.email
       }
     });
 
@@ -197,13 +205,32 @@ userRouter.post('/', requireAdmin, validateRequest(userValidation.createUser), a
       }
     });
 
-    // Send invitation email (in a real implementation, you would send an actual email)
-    // For now, we'll just log it
-    console.log(`Invitation sent to ${email} for role ${role}`);
+    // Get business name for email
+    const business = await prisma.business.findUnique({
+      where: { id: req.user.businessId },
+      select: { name: true }
+    });
+
+    // Send invitation email
+    try {
+      await emailService.sendStaffInvitation(
+        email,
+        name,
+        role,
+        tempPassword,
+        req.user.email,
+        business?.name
+      );
+      console.log(`Invitation email sent to ${email} for role ${role}`);
+    } catch (emailError) {
+      console.error('Failed to send invitation email:', emailError);
+      // Don't fail the request if email fails, just log it
+    }
 
     res.status(201).json({
       ...user,
-      message: `Invitation sent to ${email}`
+      message: `Invitation sent to ${email}`,
+      tempPassword: tempPassword // Remove this in production - only for development
     });
   } catch (error) {
     next(error);
@@ -332,12 +359,50 @@ userRouter.post('/:id/resend-invite', requireAdmin, async (req: AuthenticatedReq
 
     if (!user) throw AppError.NotFoundError('User not found');
 
-    // In a real implementation, you would send an email invite here
-    // For now, we'll just return a success message
+    // Generate a new temporary password
+    const tempPassword = crypto.randomBytes(12).toString('hex') + 'A1!';
+    
+    // Update the Supabase user with new password
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user.supabase_id, {
+      password: tempPassword,
+      user_metadata: {
+        temp_password: true,
+        invited_by: req.user.email,
+        last_invite_sent: new Date().toISOString()
+      }
+    });
+
+    if (updateError) {
+      throw AppError.ValidationError('Failed to update user password: ' + updateError.message);
+    }
+
+    // Get business name for email
+    const business = await prisma.business.findUnique({
+      where: { id: req.user.businessId },
+      select: { name: true }
+    });
+
+    // Send invitation email
+    try {
+      await emailService.sendStaffInvitation(
+        user.email,
+        user.name,
+        user.role,
+        tempPassword,
+        req.user.email,
+        business?.name
+      );
+      console.log(`Invitation email resent to ${user.email}`);
+    } catch (emailError) {
+      console.error('Failed to send invitation email:', emailError);
+      // Don't fail the request if email fails, just log it
+    }
+
     res.json({
       message: 'Invite resent successfully',
       userId: id,
-      email: user.email
+      email: user.email,
+      tempPassword: tempPassword // Remove this in production - only for development
     });
   } catch (error) {
     next(error);

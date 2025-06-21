@@ -5,6 +5,7 @@ import { prisma } from '../config/prisma';
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../config/config';
 import { logger } from '../utils/logger';
+import { emailService } from '../services/email.service';
 
 const FREE_TIER_CLIENT_LIMIT = 10;
 
@@ -69,6 +70,16 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     });
     logger.info('Database user created:', { userId: dbUser.id });
 
+    // Send email verification
+    try {
+      const verificationLink = `${config.CORS_ORIGIN}/verify-email?token=${user.id}`;
+      await emailService.sendEmailVerification(email, verificationLink, name);
+      logger.info('Email verification sent successfully:', { email });
+    } catch (emailError) {
+      logger.error('Failed to send email verification:', emailError);
+      // Don't fail the request if email fails, just log it
+    }
+
     logger.info('User registration completed successfully:', {
       userId: dbUser.id,
       email: dbUser.email,
@@ -76,7 +87,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     });
 
     res.status(201).json({
-      message: 'Registration successful',
+      message: 'Registration successful. Please check your email to verify your account.',
       user: {
         id: dbUser.id,
         email: dbUser.email,
@@ -188,15 +199,39 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
   try {
     const { email } = req.body;
 
+    // Check if user exists in our database
+    const user = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (!user) {
+      // Don't reveal if user exists or not for security
+      logger.info('Password reset requested for non-existent email:', email);
+      res.json({ message: 'If an account with that email exists, a password reset link has been sent' });
+      return;
+    }
+
+    // Generate reset link using Supabase
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${config.CORS_ORIGIN}/reset-password`,
     });
 
     if (error) {
+      logger.error('Supabase password reset error:', error);
       throw AppError.ValidationError(error.message);
     }
 
-    res.json({ message: 'Password reset email sent' });
+    // Send email notification
+    try {
+      const resetLink = `${config.CORS_ORIGIN}/reset-password?email=${encodeURIComponent(email)}`;
+      await emailService.sendPasswordReset(email, resetLink, user.name);
+      logger.info('Password reset email sent successfully:', { email });
+    } catch (emailError) {
+      logger.error('Failed to send password reset email:', emailError);
+      // Don't fail the request if email fails, just log it
+    }
+
+    res.json({ message: 'If an account with that email exists, a password reset link has been sent' });
   } catch (error) {
     next(error);
   }
