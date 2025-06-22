@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: tenantflow-backend
+    env: node
+    plan: starter
+    region: oregon
+    buildCommand: npm install && npm run prisma:generate && npm run build
+    startCommand: npm run start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: RATE_LIMIT_WINDOW_MS
+        value: 900000
+      - key: RATE_LIMIT_MAX
+        value: 100
+      - key: LOG_LEVEL
+        value: info
+      # Add these environment variables in Render dashboard:
+      # DATABASE_URL, DIRECT_URL, CORS_ORIGIN, SUPABASE_URL, 
+      # SUPABASE_SERVICE_ROLE_KEY, OPENAI_API_KEY, JWT_SECRET
+      # and any other sensitive variables 
