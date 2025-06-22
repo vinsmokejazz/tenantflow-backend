@@ -21,7 +21,7 @@ import { logger } from '../utils/logger';
 const authRouter = express.Router();
 
 // Debug middleware to log incoming requests
-authRouter.use((req, res, next) => {
+authRouter.use((req, _res, next) => {
   if (req.path === '/register' || req.path === '/login') {
     logger.info('Auth request received:', {
       path: req.path,

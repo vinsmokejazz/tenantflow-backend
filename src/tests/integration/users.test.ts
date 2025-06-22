@@ -4,6 +4,7 @@ import { app } from '../../index';
 describe('User Management Endpoints', () => {
   let adminToken: string;
   let staffToken: string;
+  let staffUserId: string;
 
   const adminUser = {
     email: 'admin@example.com',
@@ -33,6 +34,13 @@ describe('User Management Endpoints', () => {
       });
 
     adminToken = loginResponse.body.session.access_token;
+
+    // Create staff user and capture id
+    const staffResponse = await request(app)
+      .post('/api/v1/user')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(staffUser);
+    staffUserId = staffResponse.body.id;
   });
 
   describe('POST /api/v1/user', () => {

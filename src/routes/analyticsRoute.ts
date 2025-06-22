@@ -11,7 +11,7 @@ const analyticsController = new AnalyticsController();
 router.use(authenticate);
 
 // Simple analytics endpoint (no business validation required)
-router.get('/', async (req: any, res: any) => {
+router.get('/', async (_req: any, res: any) => {
   try {
     // Return basic analytics data
     res.json({
@@ -38,7 +38,7 @@ router.get('/', async (req: any, res: any) => {
 // Dashboard metrics
 router.get(
   '/dashboard/:businessId',
-  (req, res, next) => {
+  (req, _res, next) => {
     console.log('Dashboard request:', {
       businessId: req.params.businessId,
       query: req.query,

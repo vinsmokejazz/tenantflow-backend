@@ -37,7 +37,7 @@ export class EmailService {
 
     // If SMTP is configured, use it; otherwise, use a test account
     if (emailConfig.host && emailConfig.auth.user && emailConfig.auth.pass) {
-      this.transporter = nodemailer.createTransporter(emailConfig);
+      this.transporter = nodemailer.createTransport(emailConfig);
       logger.info('Email service initialized with SMTP configuration');
     } else {
       // For development, use a test account or log emails

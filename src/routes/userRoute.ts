@@ -129,7 +129,7 @@ userRouter.post('/', requireAdmin, validateRequest(userValidation.createUser), a
       throw AppError.ValidationError('Failed to check existing users: ' + listError.message);
     }
 
-    const existingSupabaseUser = supabaseUsers.users.find(user => user.email === email);
+    const existingSupabaseUser = (supabaseUsers.users as any[]).find(user => user.email === email);
     
     if (existingSupabaseUser) {
       // User exists in Supabase but not in our database

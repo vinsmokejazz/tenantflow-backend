@@ -3,7 +3,7 @@ import { prisma } from '../config/prisma';
 import { logger } from '../utils/logger';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-12-18.acacia',
+  apiVersion: '2025-05-28.basil',
 });
 
 export interface SubscriptionPlan {
@@ -123,7 +123,7 @@ export class SubscriptionService {
   }
 
   // Create subscription
-  static async createSubscription(businessId: string, planId: string, paymentMethodId?: string) {
+  static async createSubscription(businessId: string, planId: string) {
     try {
       const business = await prisma.business.findUnique({
         where: { id: businessId },
@@ -164,8 +164,8 @@ export class SubscriptionService {
           subscription: planId,
           stripeSubscriptionId: subscription.id,
           subscriptionStatus: subscription.status,
-          subscriptionStartDate: new Date(subscription.current_period_start * 1000),
-          subscriptionEndDate: new Date(subscription.current_period_end * 1000),
+          subscriptionStartDate: new Date((subscription as any).current_period_start * 1000),
+          subscriptionEndDate: new Date((subscription as any).current_period_end * 1000),
         },
       });
 
@@ -178,7 +178,7 @@ export class SubscriptionService {
           eventType: 'created',
           amount: plan.price,
           status: subscription.status,
-          metadata: subscription,
+          metadata: JSON.parse(JSON.stringify(subscription)),
         },
       });
 
@@ -220,7 +220,7 @@ export class SubscriptionService {
         data: {
           subscription: newPlanId,
           subscriptionStatus: subscription.status,
-          subscriptionEndDate: new Date(subscription.current_period_end * 1000),
+          subscriptionEndDate: new Date((subscription as any).current_period_end * 1000),
         },
       });
 
@@ -233,7 +233,7 @@ export class SubscriptionService {
           eventType: 'updated',
           amount: plan.price,
           status: subscription.status,
-          metadata: subscription,
+          metadata: JSON.parse(JSON.stringify(subscription)),
         },
       });
 
@@ -277,7 +277,7 @@ export class SubscriptionService {
           eventType: 'cancelled',
           amount: 0,
           status: subscription.status,
-          metadata: subscription,
+          metadata: JSON.parse(JSON.stringify(subscription)),
         },
       });
 
@@ -321,7 +321,7 @@ export class SubscriptionService {
           eventType: 'reactivated',
           amount: 0,
           status: subscription.status,
-          metadata: subscription,
+          metadata: JSON.parse(JSON.stringify(subscription)),
         },
       });
 
@@ -464,7 +464,7 @@ export class SubscriptionService {
       where: { id: businessId },
       data: {
         subscriptionStatus: subscription.status,
-        subscriptionEndDate: new Date(subscription.current_period_end * 1000),
+        subscriptionEndDate: new Date((subscription as any).current_period_end * 1000),
       },
     });
 
@@ -476,15 +476,15 @@ export class SubscriptionService {
         eventType: subscription.status,
         amount: subscription.items.data[0]?.price.unit_amount ? subscription.items.data[0].price.unit_amount / 100 : 0,
         status: subscription.status,
-        metadata: subscription,
+        metadata: JSON.parse(JSON.stringify(subscription)),
       },
     });
   }
 
   private static async handleInvoiceEvent(invoice: Stripe.Invoice) {
-    if (!invoice.subscription) return;
+    if (!(invoice as any).subscription) return;
 
-    const subscription = await stripe.subscriptions.retrieve(invoice.subscription as string);
+    const subscription = await stripe.subscriptions.retrieve((invoice as any).subscription as string);
     const businessId = subscription.metadata.businessId;
     
     if (!businessId) {
@@ -500,7 +500,7 @@ export class SubscriptionService {
         eventType: `invoice.${invoice.status}`,
         amount: invoice.amount_paid / 100,
         status: invoice.status,
-        metadata: invoice,
+        metadata: JSON.parse(JSON.stringify(invoice)),
       },
     });
   }

@@ -1,7 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth.middleware';
-import { validateRequest } from '../middleware/validationMiddleware';
 import { AppError } from '../utils/error';
 
 const dealRouter = express.Router();

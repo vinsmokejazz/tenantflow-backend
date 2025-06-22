@@ -2,7 +2,6 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth.middleware';
-import { requireAdmin } from '../middleware/authRoles';
 import { validateRequest } from '../middleware/validationMiddleware';
 import { followUpValidation } from '../validations/followUp.validation';
 import { AppError } from '../utils/error';

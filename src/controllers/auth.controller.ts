@@ -7,8 +7,6 @@ import { config } from '../config/config';
 import { logger } from '../utils/logger';
 import { emailService } from '../services/email.service';
 
-const FREE_TIER_CLIENT_LIMIT = 10;
-
 interface AuthRequest extends Request {
   user?: {
     id: string;
@@ -508,11 +506,12 @@ export const signupStaff = async (req: AuthRequest, res: Response, next: NextFun
   }
 };
 
-export const checkClientLimit = async (req: Request, res: Response, next: NextFunction) => {
+export const checkClientLimit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const businessId = req.user?.businessId;
     if (!businessId) {
-      return res.status(401).json({ error: 'Business ID not found' });
+      res.status(401).json({ error: 'Business ID not found' });
+      return;
     }
 
     // Get business subscription info
@@ -522,7 +521,8 @@ export const checkClientLimit = async (req: Request, res: Response, next: NextFu
     });
 
     if (!business) {
-      return res.status(404).json({ error: 'Business not found' });
+      res.status(404).json({ error: 'Business not found' });
+      return;
     }
 
     // Get current client count
@@ -561,7 +561,7 @@ export const checkClientLimit = async (req: Request, res: Response, next: NextFu
   }
 };
 
-export const syncSupabaseUsers = async (req: Request, res: Response, next: NextFunction) => {
+export const syncSupabaseUsers = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     logger.info('Starting Supabase user sync...');
 

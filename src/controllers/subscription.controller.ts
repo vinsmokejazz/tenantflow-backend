@@ -19,7 +19,7 @@ interface AuthRequest extends Request {
 }
 
 // Get available plans
-export const getPlans = async (req: Request, res: Response, next: NextFunction) => {
+export const getPlans = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     res.json({
       plans: Object.values(SUBSCRIPTION_PLANS)
@@ -30,11 +30,12 @@ export const getPlans = async (req: Request, res: Response, next: NextFunction) 
 };
 
 // Get current subscription
-export const getCurrentSubscription = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getCurrentSubscription = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const businessId = req.user?.businessId;
     if (!businessId) {
-      return res.status(401).json({ error: 'Business ID not found' });
+      res.status(401).json({ error: 'Business ID not found' });
+      return;
     }
 
     const subscription = await SubscriptionService.getSubscription(businessId);
@@ -53,22 +54,25 @@ export const getCurrentSubscription = async (req: AuthRequest, res: Response, ne
 };
 
 // Create checkout session
-export const createCheckoutSession = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const createCheckoutSession = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { planId, successUrl, cancelUrl } = req.body;
     const businessId = req.user?.businessId;
 
     if (!businessId) {
-      return res.status(401).json({ error: 'Business ID not found' });
+      res.status(401).json({ error: 'Business ID not found' });
+      return;
     }
 
     if (!planId || !SUBSCRIPTION_PLANS[planId]) {
-      return res.status(400).json({ error: 'Invalid plan ID' });
+      res.status(400).json({ error: 'Invalid plan ID' });
+      return;
     }
 
     const plan = SUBSCRIPTION_PLANS[planId];
     if (plan.id === 'free') {
-      return res.status(400).json({ error: 'Cannot create checkout for free plan' });
+      res.status(400).json({ error: 'Cannot create checkout for free plan' });
+      return;
     }
 
     const business = await prisma.business.findUnique({
@@ -76,7 +80,8 @@ export const createCheckoutSession = async (req: AuthRequest, res: Response, nex
     });
 
     if (!business) {
-      return res.status(404).json({ error: 'Business not found' });
+      res.status(404).json({ error: 'Business not found' });
+      return;
     }
 
     // Create customer if doesn't exist
@@ -118,20 +123,22 @@ export const createCheckoutSession = async (req: AuthRequest, res: Response, nex
 };
 
 // Create subscription
-export const createSubscription = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const createSubscription = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { planId, paymentMethodId } = req.body;
+    const { planId } = req.body;
     const businessId = req.user?.businessId;
 
     if (!businessId) {
-      return res.status(401).json({ error: 'Business ID not found' });
+      res.status(401).json({ error: 'Business ID not found' });
+      return;
     }
 
     if (!planId || !SUBSCRIPTION_PLANS[planId]) {
-      return res.status(400).json({ error: 'Invalid plan ID' });
+      res.status(400).json({ error: 'Invalid plan ID' });
+      return;
     }
 
-    const subscription = await SubscriptionService.createSubscription(businessId, planId, paymentMethodId);
+    const subscription = await SubscriptionService.createSubscription(businessId, planId);
 
     res.status(201).json({
       message: 'Subscription created successfully',
@@ -144,17 +151,19 @@ export const createSubscription = async (req: AuthRequest, res: Response, next: 
 };
 
 // Update subscription
-export const updateSubscription = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const updateSubscription = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { planId } = req.body;
     const businessId = req.user?.businessId;
 
     if (!businessId) {
-      return res.status(401).json({ error: 'Business ID not found' });
+      res.status(401).json({ error: 'Business ID not found' });
+      return;
     }
 
     if (!planId || !SUBSCRIPTION_PLANS[planId]) {
-      return res.status(400).json({ error: 'Invalid plan ID' });
+      res.status(400).json({ error: 'Invalid plan ID' });
+      return;
     }
 
     const subscription = await SubscriptionService.updateSubscription(businessId, planId);
@@ -169,12 +178,13 @@ export const updateSubscription = async (req: AuthRequest, res: Response, next: 
 };
 
 // Cancel subscription
-export const cancelSubscription = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const cancelSubscription = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const businessId = req.user?.businessId;
 
     if (!businessId) {
-      return res.status(401).json({ error: 'Business ID not found' });
+      res.status(401).json({ error: 'Business ID not found' });
+      return;
     }
 
     const subscription = await SubscriptionService.cancelSubscription(businessId);
@@ -189,12 +199,13 @@ export const cancelSubscription = async (req: AuthRequest, res: Response, next: 
 };
 
 // Reactivate subscription
-export const reactivateSubscription = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const reactivateSubscription = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const businessId = req.user?.businessId;
 
     if (!businessId) {
-      return res.status(401).json({ error: 'Business ID not found' });
+      res.status(401).json({ error: 'Business ID not found' });
+      return;
     }
 
     const subscription = await SubscriptionService.reactivateSubscription(businessId);
@@ -209,12 +220,13 @@ export const reactivateSubscription = async (req: AuthRequest, res: Response, ne
 };
 
 // Get usage limits
-export const getUsageLimits = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getUsageLimits = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const businessId = req.user?.businessId;
 
     if (!businessId) {
-      return res.status(401).json({ error: 'Business ID not found' });
+      res.status(401).json({ error: 'Business ID not found' });
+      return;
     }
 
     const usage = await SubscriptionService.checkUsageLimits(businessId);
@@ -226,18 +238,20 @@ export const getUsageLimits = async (req: AuthRequest, res: Response, next: Next
 };
 
 // Create payment intent for subscription
-export const createPaymentIntent = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const createPaymentIntent = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { planId } = req.body;
     const businessId = req.user?.businessId;
 
     if (!businessId) {
-      return res.status(401).json({ error: 'Business ID not found' });
+      res.status(401).json({ error: 'Business ID not found' });
+      return;
     }
 
     const plan = SUBSCRIPTION_PLANS[planId];
     if (!plan || plan.id === 'free') {
-      return res.status(400).json({ error: 'Invalid plan' });
+      res.status(400).json({ error: 'Invalid plan' });
+      return;
     }
 
     const business = await prisma.business.findUnique({
@@ -245,7 +259,8 @@ export const createPaymentIntent = async (req: AuthRequest, res: Response, next:
     });
 
     if (!business) {
-      return res.status(404).json({ error: 'Business not found' });
+      res.status(404).json({ error: 'Business not found' });
+      return;
     }
 
     // Create customer if doesn't exist
@@ -275,12 +290,13 @@ export const createPaymentIntent = async (req: AuthRequest, res: Response, next:
 };
 
 // Handle Stripe webhook
-export const handleWebhook = async (req: Request, res: Response, next: NextFunction) => {
+export const handleWebhook = async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const sig = req.headers['stripe-signature'];
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
   if (!sig || !endpointSecret) {
-    return res.status(400).json({ error: 'Missing signature or webhook secret' });
+    res.status(400).json({ error: 'Missing signature or webhook secret' });
+    return;
   }
 
   let event: Stripe.Event;
@@ -289,7 +305,8 @@ export const handleWebhook = async (req: Request, res: Response, next: NextFunct
     event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
   } catch (err: any) {
     logger.error('Webhook signature verification failed:', err.message);
-    return res.status(400).json({ error: 'Invalid signature' });
+    res.status(400).json({ error: 'Invalid signature' });
+    return;
   }
 
   try {
@@ -302,12 +319,13 @@ export const handleWebhook = async (req: Request, res: Response, next: NextFunct
 };
 
 // Get subscription history
-export const getSubscriptionHistory = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getSubscriptionHistory = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const businessId = req.user?.businessId;
 
     if (!businessId) {
-      return res.status(401).json({ error: 'Business ID not found' });
+      res.status(401).json({ error: 'Business ID not found' });
+      return;
     }
 
     const history = await prisma.subscriptionHistory.findMany({
@@ -323,12 +341,13 @@ export const getSubscriptionHistory = async (req: AuthRequest, res: Response, ne
 };
 
 // Downgrade to free plan
-export const downgradeToFree = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const downgradeToFree = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const businessId = req.user?.businessId;
 
     if (!businessId) {
-      return res.status(401).json({ error: 'Business ID not found' });
+      res.status(401).json({ error: 'Business ID not found' });
+      return;
     }
 
     const business = await prisma.business.findUnique({
@@ -336,7 +355,8 @@ export const downgradeToFree = async (req: AuthRequest, res: Response, next: Nex
     });
 
     if (!business) {
-      return res.status(404).json({ error: 'Business not found' });
+      res.status(404).json({ error: 'Business not found' });
+      return;
     }
 
     // Cancel current subscription if exists

@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
+    "build:deploy": "tsc --skipLibCheck",
     "start": "node dist/index.js",
+    "postinstall": "prisma generate",
     "setup": "node setup.js",
     "migrate": "node scripts/migrate.js",
     "test:auth": "node test-auth.js",

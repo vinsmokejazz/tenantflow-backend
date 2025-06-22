@@ -53,7 +53,7 @@ describe('Business Endpoints', () => {
   describe('GET /api/v1/business/:id', () => {
     it('should get business by ID', async () => {
       const response = await request(app)
-        .get(`/api/v1/business/${testUser.businessId}`)
+        .get(`/api/v1/business/${testUser.business_name}`)
         .set('Authorization', `Bearer ${authToken}`);
 
       expect(response.status).toBe(200);
@@ -78,7 +78,7 @@ describe('Business Endpoints', () => {
       };
 
       const response = await request(app)
-        .put(`/api/v1/business/${testUser.businessId}`)
+        .put(`/api/v1/business/${testUser.business_name}`)
         .set('Authorization', `Bearer ${authToken}`)
         .send(updateData);
 
@@ -106,7 +106,7 @@ describe('Business Endpoints', () => {
       const staffToken = staffLoginResponse.body.session.access_token;
 
       const response = await request(app)
-        .put(`/api/v1/business/${testUser.businessId}`)
+        .put(`/api/v1/business/${testUser.business_name}`)
         .set('Authorization', `Bearer ${staffToken}`)
         .send({ name: 'Should Fail' });
 

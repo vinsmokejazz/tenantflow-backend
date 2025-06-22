@@ -3,15 +3,6 @@ import { logger } from '../utils/logger';
 import { sendUsageLimitWarning } from './email.service';
 import { SUBSCRIPTION_PLANS } from './subscription.service';
 
-interface UsageAlert {
-  businessId: string;
-  resourceType: 'clients' | 'users' | 'deals' | 'leads';
-  currentUsage: number;
-  limit: number;
-  percentage: number;
-  lastAlertSent?: Date;
-}
-
 export class UsageAlertService {
   private static instance: UsageAlertService;
   private alertThresholds = {

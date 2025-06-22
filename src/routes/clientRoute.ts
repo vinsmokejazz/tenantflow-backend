@@ -1,6 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticate, authorize } from '../middleware/auth.middleware';
+import { authenticate } from '../middleware/auth.middleware';
 import { checkClientLimit } from '../controllers/auth.controller';
 import { validate } from '../middleware/validate.middleware';
 import { clientValidation } from '../validations/client.validation';
@@ -41,7 +41,7 @@ clientRouter.get('/', authenticate, async (req: Request, res: Response, next: Ne
 });
 
 // GET client details with leads, follow-ups, and deals
-clientRouter.get('/:id/details', validate(clientValidation.getClient), async (req: Request, res: Response, next: NextFunction) => {
+clientRouter.get('/:id/details', validate(clientValidation.getClient), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { id } = req.params;
   const businessId = req.user?.businessId;
   try {
