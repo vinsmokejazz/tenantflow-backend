@@ -4,9 +4,11 @@ import { authenticate } from '../middleware/auth.middleware';
 import { checkClientLimit } from '../controllers/auth.controller';
 import { validate } from '../middleware/validate.middleware';
 import { clientValidation } from '../validations/client.validation';
+import { AnalyticsService } from '../services/analytics.service';
 
 const clientRouter = express.Router();
 const prisma = new PrismaClient();
+const analyticsService = new AnalyticsService();
 
 // Enable CORS for all routes
 clientRouter.use((req, res, next) => {
@@ -19,6 +21,16 @@ clientRouter.use((req, res, next) => {
     next();
   }
 });
+
+// Helper function to update analytics after data changes
+const updateAnalytics = async (businessId: string) => {
+  try {
+    await analyticsService.updateAnalyticsOnDataChange(businessId);
+  } catch (error) {
+    console.error('Failed to update analytics:', error);
+    // Don't throw error to avoid breaking the main operation
+  }
+};
 
 // GET all clients for business
 clientRouter.get('/', authenticate, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -174,6 +186,9 @@ clientRouter.post('/', authenticate, checkClientLimit, validate(clientValidation
       }
     });
 
+    // Update analytics after creating client
+    await updateAnalytics(businessId!);
+
     res.status(201).json({
       ...client,
       limitInfo: {
@@ -200,25 +215,25 @@ clientRouter.put('/:id', authenticate, validate(clientValidation.updateClient), 
   }
 
   try {
-    const client = await prisma.client.updateMany({
-      where: { 
-        id,
-        businessId
-      },
-      data: {
-        name,
-        email,
-        phone
-      }
+    const existingClient = await prisma.client.findFirst({
+      where: { id, businessId }
     });
 
-    if (client.count === 0) {
-      res.status(404).json({ error: "Client not found" });
+    if (!existingClient) {
+      res.status(404).json({ error: 'Client not found' });
       return;
     }
 
-    res.json({ message: "Client updated successfully" });
-  } catch (error: any) {
+    const updatedClient = await prisma.client.update({
+      where: { id },
+      data: { name, email, phone }
+    });
+
+    // Update analytics after updating client
+    await updateAnalytics(businessId);
+
+    res.json(updatedClient);
+  } catch (error) {
     next(error);
   }
 });
@@ -234,20 +249,24 @@ clientRouter.delete('/:id', authenticate, validate(clientValidation.deleteClient
   }
 
   try {
-    const deleted = await prisma.client.deleteMany({
-      where: { 
-        id,
-        businessId
-      }
+    const existingClient = await prisma.client.findFirst({
+      where: { id, businessId }
     });
 
-    if (deleted.count === 0) {
-      res.status(404).json({ error: "Client not found" });
+    if (!existingClient) {
+      res.status(404).json({ error: 'Client not found' });
       return;
     }
 
-    res.json({ message: "Client deleted successfully" });
-  } catch (error: any) {
+    await prisma.client.delete({
+      where: { id }
+    });
+
+    // Update analytics after deleting client
+    await updateAnalytics(businessId);
+
+    res.status(204).send();
+  } catch (error) {
     next(error);
   }
 });

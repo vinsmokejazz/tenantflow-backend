@@ -1,11 +1,13 @@
 import express from 'express';
 import { AnalyticsController } from '../controllers/analytics.controller';
+import { AnalyticsService } from '../services/analytics.service';
 import { authenticate, validateBusinessAccess } from '../middleware/auth.middleware';
 import { validateRequest } from '../middleware/validationMiddleware';
 import { analyticsValidation } from '../validations/analytics.validation';
 
 const router = express.Router();
 const analyticsController = new AnalyticsController();
+const analyticsService = new AnalyticsService();
 
 // Apply authentication middleware to all routes
 router.use(authenticate);
@@ -50,6 +52,41 @@ router.get(
   // validateBusinessAccess,
   validateRequest(analyticsValidation.getDashboardMetrics),
   analyticsController.getDashboardMetrics.bind(analyticsController)
+);
+
+// Trigger analytics update for a business
+router.post(
+  '/update/:businessId',
+  async (req: any, res: any) => {
+    try {
+      const { businessId } = req.params;
+      const { days } = req.body;
+      
+      console.log('Triggering analytics update for business:', businessId);
+      
+      if (days && typeof days === 'number' && days > 0) {
+        // Generate historical analytics
+        await analyticsService.generateHistoricalAnalytics(businessId, days);
+        res.json({ 
+          message: `Analytics updated for business ${businessId} for the last ${days} days`,
+          success: true 
+        });
+      } else {
+        // Generate analytics for today
+        await analyticsService.generateAnalyticsForBusiness(businessId);
+        res.json({ 
+          message: `Analytics updated for business ${businessId}`,
+          success: true 
+        });
+      }
+    } catch (error) {
+      console.error('Error updating analytics:', error);
+      res.status(500).json({ 
+        error: 'Failed to update analytics',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
 );
 
 // Sales pipeline analytics

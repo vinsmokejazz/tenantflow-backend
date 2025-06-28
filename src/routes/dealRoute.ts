@@ -1,13 +1,25 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth.middleware';
+import { AnalyticsService } from '../services/analytics.service';
 import { AppError } from '../utils/error';
 
 const dealRouter = express.Router();
 const prisma = new PrismaClient();
+const analyticsService = new AnalyticsService();
 
 // Apply authentication to all routes
 dealRouter.use(authenticate);
+
+// Helper function to update analytics after data changes
+const updateAnalytics = async (businessId: string) => {
+  try {
+    await analyticsService.updateAnalyticsOnDataChange(businessId);
+  } catch (error) {
+    console.error('Failed to update analytics:', error);
+    // Don't throw error to avoid breaking the main operation
+  }
+};
 
 // GET all deals
 dealRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -125,6 +137,10 @@ dealRouter.post('/', async (req: Request, res: Response, next: NextFunction) => 
         assignedUser: { select: { id: true, name: true, email: true } }
       }
     });
+    
+    // Update analytics after creating deal
+    await updateAnalytics(businessId);
+    
     res.status(201).json(deal);
   } catch (error) {
     next(error);
@@ -167,6 +183,10 @@ dealRouter.put('/:id', async (req: Request, res: Response, next: NextFunction) =
         assignedUser: { select: { id: true, name: true, email: true } }
       }
     });
+    
+    // Update analytics after updating deal
+    await updateAnalytics(businessId);
+    
     res.json(updated);
   } catch (error) {
     next(error);
@@ -190,6 +210,10 @@ dealRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction
       return;
     }
     await prisma.deal.delete({ where: { id } });
+    
+    // Update analytics after deleting deal
+    await updateAnalytics(businessId);
+    
     res.status(204).send();
   } catch (error) {
     next(error);

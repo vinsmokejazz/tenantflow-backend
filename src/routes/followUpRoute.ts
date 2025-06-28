@@ -4,15 +4,27 @@ import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth.middleware';
 import { validateRequest } from '../middleware/validationMiddleware';
 import { followUpValidation } from '../validations/followUp.validation';
+import { AnalyticsService } from '../services/analytics.service';
 import { AppError } from '../utils/error';
 
 const followUpRouter = express.Router();
 const prisma = new PrismaClient();
+const analyticsService = new AnalyticsService();
 
 followUpRouter.use(cors());
 
 // Apply authentication to all routes
 followUpRouter.use(authenticate);
+
+// Helper function to update analytics after data changes
+const updateAnalytics = async (businessId: string) => {
+  try {
+    await analyticsService.updateAnalyticsOnDataChange(businessId);
+  } catch (error) {
+    console.error('Failed to update analytics:', error);
+    // Don't throw error to avoid breaking the main operation
+  }
+};
 
 // GET all follow-ups
 followUpRouter.get('/', validateRequest(followUpValidation.getFollowUps), async (req: Request, res: Response, next: NextFunction) => {
@@ -90,6 +102,10 @@ followUpRouter.post('/', validateRequest(followUpValidation.createFollowUp), asy
         assignedUser: { select: { id: true, name: true, email: true } }
       }
     });
+    
+    // Update analytics after creating follow-up
+    await updateAnalytics(businessId);
+    
     res.status(201).json(followUp);
   } catch (error) {
     next(error);
@@ -126,6 +142,10 @@ followUpRouter.put('/:id', validateRequest(followUpValidation.updateFollowUp), a
         assignedUser: { select: { id: true, name: true, email: true } }
       }
     });
+    
+    // Update analytics after updating follow-up
+    await updateAnalytics(businessId);
+    
     res.json(updated);
   } catch (error) {
     next(error);
@@ -149,6 +169,10 @@ followUpRouter.delete('/:id', validateRequest(followUpValidation.deleteFollowUp)
       return;
     }
     await prisma.followUp.delete({ where: { id } });
+    
+    // Update analytics after deleting follow-up
+    await updateAnalytics(businessId);
+    
     res.status(204).send();
   } catch (error) {
     next(error);

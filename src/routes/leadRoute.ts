@@ -4,15 +4,27 @@ import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth.middleware';
 import { validateRequest } from '../middleware/validationMiddleware';
 import { leadValidation } from '../validations/lead.validation';
+import { AnalyticsService } from '../services/analytics.service';
 import { AppError } from '../utils/error';
 
 const leadRouter = express.Router();
 const prisma = new PrismaClient();
+const analyticsService = new AnalyticsService();
 
 leadRouter.use(cors());
 
 // Apply authentication to all routes
 leadRouter.use(authenticate);
+
+// Helper function to update analytics after data changes
+const updateAnalytics = async (businessId: string) => {
+  try {
+    await analyticsService.updateAnalyticsOnDataChange(businessId);
+  } catch (error) {
+    console.error('Failed to update analytics:', error);
+    // Don't throw error to avoid breaking the main operation
+  }
+};
 
 // GET all leads
 leadRouter.get('/', validateRequest(leadValidation.getLeads), async (req: Request, res: Response, next: NextFunction) => {
@@ -110,6 +122,10 @@ leadRouter.post('/', validateRequest(leadValidation.createLead), async (req: Req
       }
     });
     console.log('LEAD CREATE: lead =', lead);
+    
+    // Update analytics after creating lead
+    await updateAnalytics(businessId);
+    
     res.status(201).json(lead);
   } catch (error) {
     next(error);
@@ -149,6 +165,10 @@ leadRouter.put('/:id', validateRequest(leadValidation.updateLead), async (req: R
       }
     });
     console.log('LEAD UPDATE: updatedLead =', updatedLead);
+    
+    // Update analytics after updating lead
+    await updateAnalytics(businessId);
+    
     res.json(updatedLead);
   } catch (error) {
     next(error);
@@ -173,6 +193,10 @@ leadRouter.delete('/:id', validateRequest(leadValidation.deleteLead), async (req
       return;
     }
     await prisma.lead.delete({ where: { id } });
+    
+    // Update analytics after deleting lead
+    await updateAnalytics(businessId);
+    
     res.status(204).send();
   } catch (error) {
     next(error);
